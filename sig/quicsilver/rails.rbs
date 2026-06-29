@@ -1,0 +1,5 @@
+module Quicsilver
+  module Rails
+    VERSION: String
+  end
+end
