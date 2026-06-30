@@ -72,6 +72,18 @@ class CursorTransport < Quicsilver::WebTransport::DatagramEndpoint
 end
 ```
 
+Request/response over a reliable stream:
+
+```ruby
+class ApplyOperation < Quicsilver::WebTransport::RpcEndpoint
+  codec :json
+
+  def perform(operation)
+    document.apply(operation)
+  end
+end
+```
+
 Server streaming:
 
 ```ruby
