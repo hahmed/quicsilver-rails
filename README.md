@@ -80,6 +80,18 @@ class CursorTransport < Quicsilver::WebTransport::DatagramEndpoint
 end
 ```
 
+Reliable message stream:
+
+```ruby
+class ChatStream < Quicsilver::WebTransport::MessageStreamEndpoint
+  codec :json
+
+  def receive(message)
+    Chat.broadcast(message)
+  end
+end
+```
+
 Request/response over a reliable stream:
 
 ```ruby
