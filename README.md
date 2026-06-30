@@ -78,7 +78,7 @@ Server streaming:
 class CompletionStream < Quicsilver::WebTransport::ServerStream
   codec :json
 
-  def call_request(request)
+  def perform(request)
     Ai.tokens(request.fetch("prompt"))
   end
 end

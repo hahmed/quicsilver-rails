@@ -15,7 +15,7 @@ module Quicsilver
     #     receives CompletionRequest
     #     streams Token
     #
-    #     def call(request)
+    #     def perform(request)
     #       Ai.tokens(request.prompt)
     #     end
     #   end
@@ -39,8 +39,8 @@ module Quicsilver
         end
       end
 
-      def call_request(_request)
-        raise NotImplementedError, "#{self.class} must implement #call_request"
+      def perform(_request)
+        raise NotImplementedError, "#{self.class} must implement #perform"
       end
 
       private
@@ -57,7 +57,7 @@ module Quicsilver
         return unless payload
 
         request = decode_with(self.class.receives, payload)
-        responses = call_request(request)
+        responses = perform(request)
         responses = [responses] unless responses.respond_to?(:each) && !responses.is_a?(String)
 
         responses.each do |response|

@@ -61,7 +61,7 @@ class QuicsilverWebTransportServerStreamTest < Minitest::Test
   class CompletionEndpoint < Quicsilver::WebTransport::ServerStream
     codec :json
 
-    def call_request(request)
+    def perform(request)
       [
         { token: request.fetch("prompt") },
         { token: "done" }
