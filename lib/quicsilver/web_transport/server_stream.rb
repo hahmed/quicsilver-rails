@@ -3,7 +3,7 @@
 require "quicsilver/web_transport/endpoint"
 require "quicsilver/web_transport/codec"
 require "quicsilver/web_transport/message_codec"
-require "quicsilver/action_cable/framed_stream"
+require "quicsilver/web_transport/framed_stream"
 
 module Quicsilver
   module WebTransport
@@ -52,7 +52,7 @@ module Quicsilver
       end
 
       def handle_stream(raw_stream)
-        stream = Quicsilver::ActionCable::FramedStream.new(raw_stream)
+        stream = Quicsilver::WebTransport::FramedStream.new(raw_stream)
         payload = stream.read_message
         return unless payload
 

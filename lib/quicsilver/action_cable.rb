@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "action_cable/server/socket"
-require "quicsilver/action_cable/framed_stream"
+require "quicsilver/web_transport/framed_stream"
 require "action_cable/server/socket/web_transport"
 
 module Quicsilver

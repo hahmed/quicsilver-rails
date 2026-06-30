@@ -2,7 +2,7 @@
 
 require "action_cable/server/socket"
 require "quicsilver/web_transport"
-require "quicsilver/action_cable/framed_stream"
+require "quicsilver/web_transport/framed_stream"
 
 module ActionCable
   module Server
@@ -66,7 +66,7 @@ module ActionCable
 
           session.accept!
           @raw_stream = session.accept_stream
-          @stream = Quicsilver::ActionCable::FramedStream.new(@raw_stream)
+          @stream = Quicsilver::WebTransport::FramedStream.new(@raw_stream)
           @open = true
           @event_target.on_open
           start_reader
