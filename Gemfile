@@ -5,8 +5,8 @@ source "https://rubygems.org"
 # Specify gem dependencies in quicsilver-rails.gemspec.
 gemspec
 
-# Local development against the sibling checkout.
-gem "quicsilver", path: "../quicsilver"
+# Track Quicsilver main while this integration is experimental. Pin before release.
+gem "quicsilver", github: "hahmed/quicsilver", branch: "main"
 
 gem "irb"
 gem "rake", "~> 13.0"
