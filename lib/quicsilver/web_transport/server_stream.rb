@@ -19,6 +19,12 @@ module Quicsilver
     #       Ai.tokens(request.prompt)
     #     end
     #   end
+    #
+    # #perform may return:
+    # - nil: no response messages
+    # - an Array: each item is sent as one response message
+    # - an Enumerator: each yielded item is sent as one response message
+    # - any other object, including Hash: sent as one response message
     class ServerStream < Endpoint
       include MessageCodec
 
@@ -57,14 +63,22 @@ module Quicsilver
         return unless payload
 
         request = decode_with(self.class.receives, payload)
-        responses = perform(request)
-        responses = [responses] unless responses.respond_to?(:each) && !responses.is_a?(String)
-
-        responses.each do |response|
+        each_response(perform(request)) do |response|
           stream.write_message encode_with(self.class.streams, response)
         end
       ensure
         stream&.close
+      end
+
+      def each_response(result)
+        return if result.nil?
+
+        case result
+        when Array, Enumerator
+          result.each { |response| yield response }
+        else
+          yield result
+        end
       end
     end
   end
