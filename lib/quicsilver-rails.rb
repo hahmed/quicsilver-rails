@@ -4,4 +4,5 @@ require "quicsilver"
 
 require "quicsilver/rails/version"
 require "quicsilver/web_transport"
+require "quicsilver/action_cable"
 require "quicsilver/engine" if defined?(::Rails::Railtie)

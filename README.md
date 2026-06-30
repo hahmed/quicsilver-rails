@@ -82,11 +82,23 @@ end
 
 The gem can experiment with that shape before upstreaming missing primitives back into `quicsilver`.
 
+## Action Cable seam
+
+The first compatibility target is Action Cable over one reliable WebTransport bidirectional stream:
+
+```ruby
+socket = ActionCable::Server::Socket::WebTransport.new(env, event_target)
+```
+
+This adapter shape mirrors Action Cable's internal socket adapter API (`possible?`, `alive?`, `transmit`, `close`, `protocol`, `rack_response`). It is intentionally narrow: Action Cable keeps its own channel multiplexing and message protocol; Quicsilver only supplies the reliable WebTransport pipe.
+
+Because WebTransport streams are byte streams, the adapter uses a small length-prefixed framing layer before handing messages to Action Cable. This replaces WebSocket frame parsing; it does not use Action Cable's Rack-hijack/WebSocket event loop.
+
 ## Planned pieces
 
 - Rails route/helper for WebTransport admission
 - Rails executor/reloader-safe session runner
-- Action Cable transport over one reliable WebTransport bidirectional stream
+- Action Cable transport wiring over one reliable WebTransport bidirectional stream
 - JSON/MessagePack codecs and stream framing
 - Higher-level datagram/RPC/stream declarations
 - Tests around Rails lifecycle, cleanup, and fallback behaviour
