@@ -9,3 +9,7 @@ module Quicsilver
     end
   end
 end
+
+require "quicsilver/web_transport/endpoint"
+require "quicsilver/web_transport/datagram_endpoint"
+require "quicsilver/web_transport/server_stream"

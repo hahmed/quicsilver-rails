@@ -58,29 +58,33 @@ That is deliberately low-level. It proves the Rack/Rails capability seam, but it
 
 ## Direction
 
-The Rails layer should hide raw bytes, stream loops, and protocol framing from app code. The API we want to experiment toward looks more like:
+The Rails layer should hide raw bytes, stream loops, and protocol framing from app code. Instead of one mega WebTransport class, this gem experiments with small endpoint base classes for each transport shape.
+
+Datagrams:
 
 ```ruby
-class EditorTransport < ApplicationWebTransport::Session
-  datagram :cursor, payload: CursorUpdate
-  rpc :apply_operation, payload: Operation
-  stream :completion, payload: CompletionRequest
+class CursorTransport < Quicsilver::WebTransport::DatagramEndpoint
+  codec :json
 
-  def cursor(update)
-    broadcast_cursor update
-  end
-
-  def apply_operation(operation)
-    document.apply(operation)
-  end
-
-  def completion(request)
-    Ai.tokens(request.prompt)
+  def receive(cursor)
+    broadcast_cursor cursor
   end
 end
 ```
 
-The gem can experiment with that shape before upstreaming missing primitives back into `quicsilver`.
+Server streaming:
+
+```ruby
+class CompletionStream < Quicsilver::WebTransport::ServerStream
+  codec :json
+
+  def call_request(request)
+    Ai.tokens(request.fetch("prompt"))
+  end
+end
+```
+
+The base classes accept the WebTransport session, run the receive loop, decode messages, encode responses, wrap work in the Rails executor, and close the session. The gem can experiment with this shape before upstreaming missing primitives back into `quicsilver`.
 
 ## Action Cable seam
 
