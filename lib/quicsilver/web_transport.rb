@@ -11,6 +11,7 @@ module Quicsilver
 end
 
 require "quicsilver/web_transport/framed_stream"
+require "quicsilver/web_transport/thread_runner"
 require "quicsilver/web_transport/endpoint"
 require "quicsilver/web_transport/datagram_endpoint"
 require "quicsilver/web_transport/rpc_endpoint"

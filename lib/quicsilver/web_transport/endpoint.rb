@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "action_dispatch/http/request"
+require "quicsilver/web_transport/thread_runner"
 
 module Quicsilver
   module WebTransport
@@ -52,8 +53,14 @@ module Quicsilver
       end
 
       def spawn(&block)
-        Thread.new do
-          executor.wrap(source: "quicsilver.webtransport", &block)
+        runner.spawn(executor: executor, source: "quicsilver.webtransport", &block)
+      end
+
+      def runner
+        if defined?(::Rails) && ::Rails.respond_to?(:application) && ::Rails.application
+          ::Rails.application.config.quicsilver.webtransport_runner
+        else
+          ThreadRunner.new
         end
       end
 

@@ -9,6 +9,7 @@ module Quicsilver
 
     initializer "quicsilver.executor" do |app|
       config.quicsilver.executor ||= app.executor
+      config.quicsilver.webtransport_runner ||= Quicsilver::WebTransport::ThreadRunner.new
     end
 
     initializer "quicsilver.routes" do

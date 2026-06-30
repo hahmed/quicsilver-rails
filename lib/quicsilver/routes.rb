@@ -18,7 +18,6 @@ module Quicsilver
 
     def resolve_webtransport_endpoint(to)
       return to if to.respond_to?(:call)
-      return to.call if to.respond_to?(:call)
 
       to.to_s.camelize.constantize
     end
