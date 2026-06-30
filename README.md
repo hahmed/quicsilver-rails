@@ -27,6 +27,14 @@ Then run:
 bundle install
 ```
 
+Mount an endpoint in `config/routes.rb`:
+
+```ruby
+Rails.application.routes.draw do
+  webtransport "/cursors", to: CursorTransport
+end
+```
+
 ## Current low-level shape
 
 Quicsilver core exposes raw WebTransport primitives. A Rails controller or Rack endpoint can accept a session and hand it to application code:
