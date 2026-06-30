@@ -118,6 +118,29 @@ end
 
 The base classes accept the WebTransport session, run the receive loop, decode messages, encode responses, wrap work in the Rails executor, and close the session. The gem can experiment with this shape before upstreaming missing primitives back into `quicsilver`.
 
+Browser helper:
+
+```js
+import { connect, rpc, serverStream, openMessageStream } from "quicsilver/web_transport"
+
+const transport = await connect("https://localhost:3000/completion")
+
+const result = await rpc(transport, { op: "insert", text: "hello" })
+
+for await (const token of serverStream(transport, { prompt: "hello" })) {
+  console.log(token)
+}
+
+const chat = await openMessageStream(transport)
+await chat.send({ body: "hello" })
+
+for await (const message of chat.responses()) {
+  console.log(message)
+}
+```
+
+Reliable WebTransport streams are byte streams, not message streams. The helper hides Quicsilver's length-prefixed framing so app code sends and receives JSON messages instead of remembering byte layout details.
+
 ## Action Cable seam
 
 The first compatibility target is Action Cable over one reliable WebTransport bidirectional stream:
