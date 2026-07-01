@@ -2,7 +2,7 @@
 
 require "test_helper"
 
-class QuicsilverWebTransportServerStreamTest < Minitest::Test
+class QuicsilverWebTransportServerStreamingEndpointTest < Minitest::Test
   class RawStream
     attr_reader :writes, :closed
 
@@ -58,7 +58,7 @@ class QuicsilverWebTransportServerStreamTest < Minitest::Test
 
   Context = Struct.new(:webtransport, keyword_init: true)
 
-  class CompletionEndpoint < Quicsilver::WebTransport::ServerStream
+  class CompletionEndpoint < Quicsilver::WebTransport::ServerStreamingEndpoint
     codec :json
 
     def perform(request)
@@ -69,7 +69,7 @@ class QuicsilverWebTransportServerStreamTest < Minitest::Test
     end
   end
 
-  class HashResponseEndpoint < Quicsilver::WebTransport::ServerStream
+  class HashResponseEndpoint < Quicsilver::WebTransport::ServerStreamingEndpoint
     codec :json
 
     def perform(request)

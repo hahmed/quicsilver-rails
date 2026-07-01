@@ -137,7 +137,7 @@ class ApplyOperation < Quicsilver::WebTransport::RpcEndpoint
 end
 ```
 
-### Server streams: reliable progressive output
+### Server streamings: reliable progressive output
 
 A WebTransport unidirectional stream is reliable and ordered, but only one side writes to it. That maps naturally to server-produced output where the client starts or joins some work and then receives a sequence of chunks.
 
@@ -151,7 +151,7 @@ Real-world uses include:
 Unlike datagrams, these messages are not disposable. Unlike a general bidirectional message stream, the lifecycle is usually tied to one server-produced result stream.
 
 ```ruby
-class CompletionStream < Quicsilver::WebTransport::ServerStream
+class CompletionStream < Quicsilver::WebTransport::ServerStreamingEndpoint
   codec :json
 
   def perform(request)
@@ -167,7 +167,7 @@ end
 | Datagram endpoint | Datagram | unreliable, unordered | newer state replaces older state |
 | Message stream endpoint | Bidirectional stream | reliable, ordered | both sides exchange messages that must arrive in order |
 | RPC endpoint | Bidirectional stream | reliable request/response | a session command needs a structured result |
-| Server stream | Unidirectional stream | reliable, ordered server output | the server emits progressive chunks |
+| Server streaming | Unidirectional stream | reliable, ordered server output | the server emits progressive chunks |
 
 
 The base classes accept the WebTransport session, run the receive loop, decode messages, encode responses, wrap work in the Rails executor, and close the session. The gem can experiment with this shape before upstreaming missing primitives back into `quicsilver`.

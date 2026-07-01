@@ -7,7 +7,7 @@ module Quicsilver
     #   webtransport "/cursors", to: CursorTransport
     #
     # Endpoint classes such as Quicsilver::WebTransport::DatagramEndpoint,
-    # RpcEndpoint, and ServerStream implement .call(env), so they can be mounted
+    # RpcEndpoint, and ServerStreamingEndpoint implement .call(env), so they can be mounted
     # directly through Rails routing.
     def webtransport(path, to:, **options)
       endpoint = resolve_webtransport_endpoint(to)

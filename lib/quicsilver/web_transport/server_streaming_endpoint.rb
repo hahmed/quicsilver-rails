@@ -11,7 +11,7 @@ module Quicsilver
     # WebTransport bidirectional stream.
     #
     # Example:
-    #   class CompletionStream < Quicsilver::WebTransport::ServerStream
+    #   class CompletionStream < Quicsilver::WebTransport::ServerStreamingEndpoint
     #     receives CompletionRequest
     #     streams Token
     #
@@ -25,7 +25,7 @@ module Quicsilver
     # - an Array: each item is sent as one response message
     # - an Enumerator: each yielded item is sent as one response message
     # - any other object, including Hash: sent as one response message
-    class ServerStream < Endpoint
+    class ServerStreamingEndpoint < Endpoint
       include MessageCodec
 
       class << self
