@@ -6,7 +6,7 @@ source "https://rubygems.org"
 gemspec
 
 # Track Quicsilver main while this integration is experimental. Pin before release.
-gem "quicsilver", github: "hahmed/quicsilver", branch: "main"
+gem "quicsilver", github: "hahmed/quicsilver", branch: "webtransport-io-api"
 
 gem "irb"
 gem "rake", "~> 13.0"

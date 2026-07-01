@@ -1,7 +1,7 @@
 GIT
   remote: https://github.com/hahmed/quicsilver.git
-  revision: 61fd1af38791cc53c52eeba9170c3c56170eebda
-  branch: main
+  revision: f6241592bec157ed0561e1b766b14d80275b19cd
+  branch: webtransport-io-api
   specs:
     quicsilver (0.4.0)
       console
@@ -16,10 +16,10 @@ PATH
   remote: .
   specs:
     quicsilver-rails (0.1.0)
-      actioncable (>= 7.1, < 8.1)
-      actionpack (>= 7.1, < 8.1)
+      actioncable (>= 7.1)
+      actionpack (>= 7.1)
       quicsilver (>= 0.1.0)
-      railties (>= 7.1, < 8.1)
+      railties (>= 7.1)
 
 GEM
   remote: https://rubygems.org/
