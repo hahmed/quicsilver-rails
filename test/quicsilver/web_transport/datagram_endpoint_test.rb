@@ -16,12 +16,21 @@ class QuicsilverWebTransportDatagramEndpointTest < Minitest::Test
       @accepted = true
     end
 
-    def each_datagram
-      @datagrams.each { |datagram| yield datagram }
+    def on_datagram(&block)
+      @datagrams.each(&block)
+    end
+
+    def on_close(&block)
+      @close_callback = block
     end
 
     def close
       @closed = true
+      @close_callback&.call
+    end
+
+    def open?
+      !@closed
     end
 
     def accepted?

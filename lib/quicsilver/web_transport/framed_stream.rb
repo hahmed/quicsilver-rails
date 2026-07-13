@@ -15,6 +15,9 @@ module Quicsilver
         @stream = stream
         @max_message_size = max_message_size
         @buffer = "".b
+        @chunks = nil
+
+        adapt_callback_stream unless @stream.respond_to?(:read)
       end
 
       def read_message
@@ -23,7 +26,7 @@ module Quicsilver
             return message
           end
 
-          chunk = @stream.read
+          chunk = read_chunk
           return nil unless chunk
 
           @buffer << chunk.b
@@ -40,6 +43,22 @@ module Quicsilver
       end
 
       private
+
+      def adapt_callback_stream
+        @chunks = Queue.new
+        @stream.on_data { |chunk| @chunks << chunk }
+        @stream.on_close { @chunks.close }
+      end
+
+      def read_chunk
+        if @chunks
+          @chunks.pop
+        else
+          @stream.read
+        end
+      rescue ClosedQueueError
+        nil
+      end
 
       def take_message
         return nil if @buffer.bytesize < 4

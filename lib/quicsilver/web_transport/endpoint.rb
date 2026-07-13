@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-require "action_dispatch/http/request"
+require "rails"
+require "action_dispatch"
 require "quicsilver/web_transport/thread_runner"
 
 module Quicsilver
@@ -49,7 +50,15 @@ module Quicsilver
         raise NotImplementedError, "#{self.class} must implement #run"
       ensure
         disconnect
-        session.close
+        session.close if session.open?
+      end
+
+      def wait_for_session_close
+        closed = Queue.new
+        session.on_close { closed.close }
+        closed.pop
+      rescue ClosedQueueError
+        nil
       end
 
       def spawn(&block)

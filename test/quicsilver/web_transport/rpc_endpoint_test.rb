@@ -43,12 +43,21 @@ class QuicsilverWebTransportRpcEndpointTest < Minitest::Test
       @accepted = true
     end
 
-    def each_stream
-      @streams.each { |stream| yield stream }
+    def on_stream(&block)
+      @streams.each(&block)
+    end
+
+    def on_close(&block)
+      @close_callback = block
     end
 
     def close
       @closed = true
+      @close_callback&.call
+    end
+
+    def open?
+      !@closed
     end
 
     def accepted?

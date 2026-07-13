@@ -13,9 +13,14 @@ module Quicsilver
     end
 
     initializer "quicsilver.routes" do
-      ActiveSupport.on_load(:action_dispatch_routing) do
-        include Quicsilver::Routes
-      end
+      ActionDispatch::Routing::Mapper.include Quicsilver::Routes
+    end
+
+    initializer "quicsilver.alt_svc" do |app|
+      next unless app.config.quicsilver.alt_svc
+
+      options = app.config.quicsilver.alt_svc == true ? {} : app.config.quicsilver.alt_svc
+      app.middleware.insert_before 0, Quicsilver::Middleware::AltSvc, **options
     end
 
     initializer "quicsilver.action_cable", after: "action_cable.set_configs" do

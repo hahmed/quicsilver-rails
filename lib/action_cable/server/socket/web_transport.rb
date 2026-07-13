@@ -24,7 +24,7 @@ module ActionCable
       class WebTransport # :nodoc:
         attr_reader :session, :stream
 
-        def initialize(env, event_target, event_loop = nil, protocols: ActionCable::INTERNAL[:protocols])
+        def initialize(env, event_target, event_loop = nil, protocols: self.class.default_protocols)
           @env = env
           @event_target = event_target
           @event_loop = event_loop
@@ -81,6 +81,14 @@ module ActionCable
         private
 
         attr_reader :event_target
+
+        def self.default_protocols
+          if ActionCable.const_defined?(:INTERNAL)
+            ActionCable::INTERNAL[:protocols]
+          else
+            ["actioncable-v1-json"]
+          end
+        end
 
         def start_reader
           @reader = Thread.new do

@@ -1,10 +1,35 @@
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
+let certificateOptions
 
 export async function connect(url, options = {}) {
-  const transport = new WebTransport(url, options)
+  const transport = new WebTransport(url, {
+    ...(await localDevelopmentCertificateOptions()),
+    ...options,
+  })
   await transport.ready
   return transport
+}
+
+async function localDevelopmentCertificateOptions() {
+  if (location.hostname !== "localhost" && !location.hostname.endsWith(".test")) return {}
+  if (certificateOptions) return certificateOptions
+
+  const response = await fetch("/.well-known/quicsilver/webtransport-certificate")
+  if (!response.ok) throw new Error("WebTransport certificate hash is not ready")
+
+  const certificate = await response.json()
+  console.log("WebTransport certificate hash", certificate.sha256)
+
+  const value = Uint8Array.from(atob(certificate.sha256), character => character.charCodeAt(0))
+  certificateOptions = {
+    serverCertificateHashes: [{
+      algorithm: certificate.algorithm || "sha-256",
+      value,
+    }],
+  }
+
+  return certificateOptions
 }
 
 export async function writeFrame(writer, payload) {

@@ -38,9 +38,11 @@ module Quicsilver
       private
 
       def run
-        session.each_datagram do |packet|
+        session.on_datagram do |packet|
           receive decode_with(self.class.receives, packet)
         end
+
+        wait_for_session_close
       end
     end
   end
