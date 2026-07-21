@@ -40,8 +40,12 @@ class ActionCableWebTransportSocketTest < Minitest::Test
       @accepted = true
     end
 
-    def accept_stream
-      @stream
+    def on_stream(&block)
+      @on_stream = block
+    end
+
+    def deliver_stream
+      @on_stream.call(@stream)
     end
 
     def open?
@@ -72,15 +76,15 @@ class ActionCableWebTransportSocketTest < Minitest::Test
       @writes << message
     end
 
+    def close
+      @reads.close unless @reads.closed?
+    end
+
     private
 
     def frame(message)
       message = message.to_s.b
       [message.bytesize].pack("N") + message
-    end
-
-    def close
-      @reads.close unless @reads.closed?
     end
   end
 
@@ -94,10 +98,14 @@ class ActionCableWebTransportSocketTest < Minitest::Test
 
   def test_rack_response_accepts_session_and_reads_messages
     stream = Stream.new("hello")
+    session = Session.new(stream)
     target = EventTarget.new
-    socket = build_socket(session: Session.new(stream), target: target)
+    socket = build_socket(session: session, target: target)
 
     assert_equal [200, {}, []], socket.rack_response
+    refute target.opened
+
+    session.deliver_stream
     sleep 0.01
 
     assert target.opened
@@ -107,9 +115,11 @@ class ActionCableWebTransportSocketTest < Minitest::Test
 
   def test_transmit_writes_to_webtransport_stream
     stream = Stream.new
-    socket = build_socket(session: Session.new(stream))
+    session = Session.new(stream)
+    socket = build_socket(session: session)
 
     socket.rack_response
+    session.deliver_stream
 
     assert socket.transmit("message")
     assert_equal [["message".bytesize].pack("N") + "message"], stream.writes

@@ -14,8 +14,7 @@ github "rails/rails", branch: "main" do
   gem "railties"
 end
 
-# Track Quicsilver browser-compatible WebTransport branch while this integration is experimental.
-gem "quicsilver", github: "hahmed/quicsilver", branch: "webtransport-capsule-behavior"
+gem "quicsilver", github: "hahmed/quicsilver", branch: "main"
 
 gem "irb"
 gem "rake", "~> 13.0"

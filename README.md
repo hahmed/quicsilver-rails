@@ -4,13 +4,11 @@ Warning: early experiment.
 
 Rails integration experiments for [Quicsilver](https://github.com/hahmed/quicsilver), a Ruby HTTP/3/WebTransport server.
 
-The core `quicsilver` gem owns the protocol primitives and exposes a WebTransport session through Rack:
+The core `quicsilver` gem owns the HTTP/3, QUIC, and WebTransport protocol primitives. `quicsilver-rails` provides Rails-shaped integration points: routing helpers, Rails executor wrapping, endpoint base classes, Action Cable experiments, codecs/framing, JavaScript helpers, and Alt-Svc middleware.
 
 ```ruby
 session = Quicsilver::WebTransport.from_env(request.env)
 ```
-
-`quicsilver-rails` is where the Rails-shaped API can evolve: routing helpers, Rails executor wrapping, Action Cable over WebTransport, codecs/framing, and higher-level realtime declarations.
 
 ## Installation
 
@@ -31,9 +29,90 @@ Mount an endpoint in `config/routes.rb`:
 
 ```ruby
 Rails.application.routes.draw do
-  webtransport "/cursors", to: CursorTransport
+  webtransport "/echo", to: EchoTransport
 end
 ```
+
+## HTTP/3 discovery with Alt-Svc
+
+Browsers do not upgrade HTTP/1.1 to HTTP/3 using an `Upgrade:` header. HTTP/3 is discovered through `Alt-Svc`:
+
+```http
+Alt-Svc: h3=":3000"; ma=86400
+```
+
+A typical local setup has two listeners for the same Rails app:
+
+- HTTPS over TCP for the first page load, usually Falcon/Puma/reverse proxy
+- HTTP/3 over UDP served by Quicsilver
+
+Enable the provided middleware in development:
+
+```ruby
+# config/environments/development.rb
+config.quicsilver.alt_svc = {
+  port: ENV.fetch("QUICSILVER_PORT", 3000).to_i,
+  max_age: 86_400
+}
+```
+
+You can also use the default options:
+
+```ruby
+config.quicsilver.alt_svc = true
+```
+
+For local Chrome testing with a development CA, you will often need to force QUIC for the origin to avoid local-certificate and cached Alt-Svc backoff issues:
+
+```bash
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --user-data-dir=/tmp/quicsilver-chrome-h3 \
+  --origin-to-force-quic-on=quicsilver.test:3000 \
+  https://quicsilver.test:3000/
+```
+
+## Minimal echo endpoint
+
+A reliable bidirectional stream is the simplest first smoke test. The browser creates one WebTransport bidirectional stream, sends one length-prefixed JSON message, and receives one length-prefixed JSON response.
+
+```ruby
+# app/transports/echo_transport.rb
+class EchoTransport < Quicsilver::WebTransport::MessageStreamEndpoint
+  codec :json
+
+  def receive(message)
+    Rails.logger.info("[echo] #{message.inspect}")
+    { echo: message }
+  end
+end
+```
+
+```ruby
+# config/routes.rb
+Rails.application.routes.draw do
+  webtransport "/echo", to: EchoTransport
+end
+```
+
+The JavaScript helper included with this gem handles the 4-byte big-endian length prefix used by `Quicsilver::WebTransport::FramedStream`:
+
+```js
+import { connect, openMessageStream } from "quicsilver/web_transport"
+
+const transport = await connect("https://quicsilver.test:3000/echo")
+const stream = await openMessageStream(transport)
+
+await stream.send({ hello: "world" })
+
+for await (const message of stream.responses()) {
+  console.log(message)
+  break
+}
+
+transport.close()
+```
+
+A successful end-to-end smoke should show the browser resolving `transport.ready`, Quicsilver parsing an HTTP/3 Extended CONNECT request with `:protocol = webtransport`, Rails routing to the endpoint, and the endpoint logging the received message.
 
 ## Current low-level shape
 
@@ -49,7 +128,7 @@ class WebTransportsController < ApplicationController
 
     Thread.new do
       Rails.application.executor.wrap do
-        session.each_datagram do |packet|
+        session.on_datagram do |packet|
           session.send_datagram(packet)
         end
       ensure
@@ -137,7 +216,7 @@ class ApplyOperation < Quicsilver::WebTransport::RpcEndpoint
 end
 ```
 
-### Server streamings: reliable progressive output
+### Server streaming: reliable progressive output
 
 A WebTransport unidirectional stream is reliable and ordered, but only one side writes to it. That maps naturally to server-produced output where the client starts or joins some work and then receives a sequence of chunks.
 
@@ -169,7 +248,6 @@ end
 | RPC endpoint | Bidirectional stream | reliable request/response | a session command needs a structured result |
 | Server streaming | Unidirectional stream | reliable, ordered server output | the server emits progressive chunks |
 
-
 The base classes accept the WebTransport session, run the receive loop, decode messages, encode responses, wrap work in the Rails executor, and close the session. The gem can experiment with this shape before upstreaming missing primitives back into `quicsilver`.
 
 ## Action Cable seam
@@ -180,9 +258,11 @@ The first compatibility target is Action Cable over one reliable WebTransport bi
 socket = ActionCable::Server::Socket::WebTransport.new(env, event_target)
 ```
 
-This adapter shape mirrors Action Cable's internal socket adapter API (`possible?`, `alive?`, `transmit`, `close`, `protocol`, `rack_response`). It is intentionally narrow: Action Cable keeps its own channel multiplexing and message protocol; Quicsilver only supplies the reliable WebTransport pipe.
+This adapter shape mirrors Action Cable's internal socket adapter API (`possible?`, `alive?`, `transmit`, `close`, `protocol`, `rack_response`). It is intentionally narrow: Action Cable keeps its own channel multiplexing and JSON protocol; Quicsilver only supplies the reliable WebTransport pipe.
 
 Because WebTransport streams are byte streams, the adapter uses a small length-prefixed framing layer before handing messages to Action Cable. This replaces WebSocket frame parsing; it does not use Action Cable's Rack-hijack/WebSocket event loop.
+
+The Action Cable adapter is still experimental and targets Rails' internal socket seam. Treat it as a compatibility experiment until there is a browser-backed Action Cable smoke test.
 
 ## Development
 

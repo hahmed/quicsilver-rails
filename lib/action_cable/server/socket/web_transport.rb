@@ -65,11 +65,7 @@ module ActionCable
           return [404, {}, []] unless possible?
 
           session.accept!
-          @raw_stream = session.accept_stream
-          @stream = Quicsilver::WebTransport::FramedStream.new(@raw_stream)
-          @open = true
-          @event_target.on_open
-          start_reader
+          session.on_stream { |raw_stream| attach_stream(raw_stream) }
 
           [200, {}, []]
         rescue => error
@@ -88,6 +84,16 @@ module ActionCable
           else
             ["actioncable-v1-json"]
           end
+        end
+
+        def attach_stream(raw_stream)
+          return if @open
+
+          @raw_stream = raw_stream
+          @stream = Quicsilver::WebTransport::FramedStream.new(@raw_stream)
+          @open = true
+          @event_target.on_open
+          start_reader
         end
 
         def start_reader
