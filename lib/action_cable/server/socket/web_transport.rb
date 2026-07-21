@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "action_cable/server/socket"
+require "action_cable/connection/client_socket"
 require "quicsilver/web_transport"
 require "quicsilver/web_transport/framed_stream"
 
