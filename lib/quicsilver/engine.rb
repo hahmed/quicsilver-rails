@@ -23,6 +23,12 @@ module Quicsilver
       app.middleware.insert_before 0, Quicsilver::Middleware::AltSvc, **options
     end
 
+    initializer "quicsilver.web_transport_certificate_helper" do
+      ActiveSupport.on_load(:action_view) do
+        include Quicsilver::Rails::WebTransportCertificateHelper
+      end
+    end
+
     initializer "quicsilver.action_cable", after: "action_cable.set_configs" do
       ActiveSupport.on_load(:action_cable) do
         Quicsilver::ActionCable.install!

@@ -2,9 +2,24 @@ const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 
 export async function connect(url, options = {}) {
-  const transport = new WebTransport(url, options)
+  const transport = new WebTransport(url, {
+    ...certificateOptionsFromMeta(),
+    ...options,
+  })
   await transport.ready
   return transport
+}
+
+function certificateOptionsFromMeta() {
+  const meta = document.querySelector('meta[name="quicsilver-webtransport-certificate-sha256"]')
+  if (!meta) return {}
+
+  return {
+    serverCertificateHashes: [{
+      algorithm: "sha-256",
+      value: Uint8Array.from(atob(meta.content), character => character.charCodeAt(0)),
+    }],
+  }
 }
 
 export async function writeFrame(writer, payload) {

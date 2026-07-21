@@ -7,3 +7,5 @@
 /spec/reports/
 /tmp/
 /examples/
+/localhost+*.pem
+/localhost+*-key.pem
