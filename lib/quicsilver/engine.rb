@@ -16,6 +16,10 @@ module Quicsilver
       ActionDispatch::Routing::Mapper.include Quicsilver::Routes
     end
 
+    initializer "quicsilver.assets" do |app|
+      app.config.assets.paths << root.join("app/javascript").to_s if app.config.respond_to?(:assets)
+    end
+
     initializer "quicsilver.alt_svc" do |app|
       next unless app.config.quicsilver.alt_svc
 
