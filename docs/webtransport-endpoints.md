@@ -82,7 +82,7 @@ For local WebTransport, render the certificate hash meta tag in your layout:
 
 The browser helper reads this tag and passes `serverCertificateHashes` to `new WebTransport(...)` in development. Production does not render this tag and uses normal public TLS validation.
 
-See [`webtransport-certificates.md`](webtransport-certificates.md) for the full local certificate setup.
+See [`local-certificates.md`](local-certificates.md) for the full local HTTPS, HTTP/3, and WebTransport certificate setup.
 
 ## Choosing an endpoint shape
 

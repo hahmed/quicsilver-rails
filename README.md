@@ -177,7 +177,7 @@ If you use WebTransport in development, add the helper meta tag to your layout:
 
 The included JavaScript helper reads this tag and passes `serverCertificateHashes` to `new WebTransport(...)` in development. Production does not render this tag and uses normal public TLS validation.
 
-See [`docs/webtransport-certificates.md`](docs/webtransport-certificates.md) for details.
+See [`docs/local-certificates.md`](docs/local-certificates.md) for details.
 
 ## Running HTTP/3 locally in Chrome
 
@@ -227,7 +227,7 @@ See [`quicsilver-playground`](https://github.com/hahmed/quicsilver-playground) f
 ## More documentation
 
 - [`docs/webtransport-endpoints.md`](docs/webtransport-endpoints.md) — route setup, endpoint classes, browser helpers, and examples.
-- [`docs/webtransport-certificates.md`](docs/webtransport-certificates.md) — local HTTPS/WebTransport certificates and browser behavior.
+- [`docs/local-certificates.md`](docs/local-certificates.md) — local HTTPS, HTTP/3, WebTransport certificates, and browser behavior.
 
 ## Development
 
