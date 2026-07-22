@@ -58,30 +58,70 @@ module Quicsilver
           OpenSSL::X509::Certificate.new(File.read(cert_file))
         end
 
+        HOSTS = %w[localhost 127.0.0.1 ::1].freeze
+
         def generate!
           FileUtils.mkdir_p(directory)
 
           key = OpenSSL::PKey::EC.generate("prime256v1")
+          root_cert, root_key = mkcert_root
+          issuer = root_cert ? root_cert.subject : OpenSSL::X509::Name.parse("/CN=localhost")
+          signing_key = root_key || key
+
           cert = OpenSSL::X509::Certificate.new
           cert.version = 2
           cert.serial = SecureRandom.random_number(2**64)
           cert.subject = OpenSSL::X509::Name.parse("/CN=localhost")
-          cert.issuer = cert.subject
+          cert.issuer = issuer
           cert.public_key = key
           cert.not_before = Time.now - 60
           cert.not_after = Time.now + VALIDITY_SECONDS
 
           extensions = OpenSSL::X509::ExtensionFactory.new
           extensions.subject_certificate = cert
-          extensions.issuer_certificate = cert
+          extensions.issuer_certificate = root_cert || cert
           cert.add_extension extensions.create_extension("basicConstraints", "CA:FALSE", true)
           cert.add_extension extensions.create_extension("keyUsage", "digitalSignature", true)
           cert.add_extension extensions.create_extension("extendedKeyUsage", "serverAuth", false)
-          cert.add_extension extensions.create_extension("subjectAltName", "DNS:localhost,IP:127.0.0.1,IP:::1", false)
-          cert.sign(key, OpenSSL::Digest::SHA256.new)
+          cert.add_extension extensions.create_extension("subjectAltName", subject_alt_name, false)
+          cert.sign(signing_key, OpenSSL::Digest::SHA256.new)
 
           File.write(cert_file, cert.to_pem)
           File.write(key_file, key.to_pem)
+        end
+
+        def subject_alt_name
+          HOSTS.map { |host| ip_address?(host) ? "IP:#{host}" : "DNS:#{host}" }.join(",")
+        end
+
+        def ip_address?(host)
+          host.match?(/\A[\d.:]+\z/)
+        end
+
+        def mkcert_root
+          root = mkcert_caroot
+          return [nil, nil] unless root
+
+          cert_path = File.join(root, "rootCA.pem")
+          key_path = File.join(root, "rootCA-key.pem")
+          return [nil, nil] unless File.exist?(cert_path) && File.exist?(key_path)
+
+          [
+            OpenSSL::X509::Certificate.new(File.read(cert_path)),
+            OpenSSL::PKey.read(File.read(key_path))
+          ]
+        rescue StandardError
+          [nil, nil]
+        end
+
+        def mkcert_caroot
+          return ENV["CAROOT"] if ENV["CAROOT"] && !ENV["CAROOT"].empty?
+          return unless system("which mkcert > /dev/null 2>&1")
+
+          root = `mkcert -CAROOT 2>/dev/null`.strip
+          root unless root.empty?
+        rescue StandardError
+          nil
         end
     end
   end

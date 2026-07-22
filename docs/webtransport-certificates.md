@@ -1,132 +1,245 @@
-# WebTransport certificates for development and production
+# HTTP/3 + WebTransport: dev & prod setup
 
-Getting WebTransport to work in a browser is mostly a certificate story. Chrome verifies WebTransport certificates under stricter rules than a normal HTTPS page load, so local development and production should use different certificate modes.
+Getting WebTransport to *just work* in a browser is mostly a certificate story, and
+Chrome verifies WebTransport certificates under **stricter rules** than a normal
+HTTPS page load. The good news: with one correctly-shaped local certificate you can
+get **page, assets, and WebTransport all over HTTP/3 locally**, with no Chrome
+flags and no manual cert-hash copying.
 
-## The two browser modes
+Target developer experience:
 
-| Mode | How you opt in | What Chrome checks | Use it for |
-| --- | --- | --- | --- |
-| CA / PKI mode | Do not pass `serverCertificateHashes` | Normal web PKI: trusted public root, valid SANs, unexpired certificate | Production |
-| Pinning mode | Pass `serverCertificateHashes` | Trust store is ignored. Certificate must be ECDSA P-256, valid for 14 days or less, and match the SHA-256 hash | Local development |
+```bash
+bin/dev
+open https://localhost:3000/
+# page + assets load over HTTP/3, "Run echo demo" connects over WebTransport
+```
 
-Two consequences matter:
+---
 
-- `mkcert` is good for a local HTTPS page, but not for WebTransport pinning. It normally creates long-lived RSA certificates, while Chrome's pinning mode requires ECDSA P-256 and a validity period of 14 days or less.
-- `new WebTransport(url)` dials the URL's host and port directly over QUIC. `Alt-Svc` helps normal browser traffic discover HTTP/3, but it is not what makes a WebTransport connection succeed.
+## The one thing to understand first
+
+Chrome applies two different certificate checks depending on how a connection is made:
+
+| Path | What Chrome checks |
+| --- | --- |
+| **Normal HTTPS / HTTP/3 page & asset fetches** | Standard web PKI: the cert must chain to a **trusted root**. For a **locally-installed** root (e.g. mkcert's), Chrome waives the public-cert policies (max validity, Certificate Transparency), which is why a long-lived mkcert cert loads a page fine. |
+| **WebTransport** | Same PKI trust **plus** it does *not* get the local-root policy waiver: the leaf must also look like a modern public cert. In practice that means **ECDSA P-256** and **validity ≤ ~14 days**. A `serverCertificateHashes` pin is an *additional* way in, with those same EC/≤14-day constraints. |
+
+This explains everything the playground saw:
+
+- mkcert cert loads the **page** fine (locally-trusted root, policy waived). ✅
+- The same mkcert cert fails **WebTransport** with `QUIC_TLS_CERTIFICATE_UNKNOWN`,
+  because mkcert issues **RSA + multi-year** leaves and WebTransport rejects that
+  shape. ❌ **The blocker was the leaf, not "private roots don't work."**
+- A self-signed EC/short-lived cert fixes WebTransport (via pinning) but is **not
+  trusted**, so normal page/asset H3 fetches over that endpoint can't verify — which
+  is why assets stayed on HTTP/1.1.
+
+### The fix: one leaf that satisfies both
+
+Issue a single **ECDSA P-256, ≤14-day** leaf **signed by the mkcert local root**
+(the one already installed via `mkcert -install`). That leaf:
+
+- **chains to a root Chrome trusts** → normal HTTP/3 page & asset fetches verify (CA mode), and
+- **is EC P-256 and ≤14 days** → WebTransport accepts it (CA mode, and it also qualifies for pinning as a belt-and-suspenders).
+
+mkcert itself only issues RSA leaves, so don't ask it to make this cert. Instead,
+borrow its root key (`$(mkcert -CAROOT)/rootCA-key.pem`) and sign your own EC leaf.
+No new trust prompts, because the developer already trusts that root.
+
+> Verified: an EC P-256 / 13-day leaf signed by an RSA mkcert-style root both passes
+> `X509::Store` chain verification against that root **and** meets the EC + ≤14-day
+> pinning constraints. One cert, both mechanisms.
+
+---
 
 ## Development
 
-Use two certificates:
+### 1. Certificate helper (signs with the mkcert root, falls back to self-signed)
 
-- Puma, Falcon, or another TCP HTTPS page server uses `mkcert` for `https://localhost:3000`.
-- Quicsilver's HTTP/3/WebTransport listener uses a short-lived ECDSA P-256 self-signed certificate and exposes its SHA-256 hash to the page.
+`quicsilver-rails` provides `Quicsilver::Rails::DevWebTransportCertificate`.
+It generates a 13-day ECDSA P-256 localhost certificate at:
 
-`quicsilver-rails` provides the WebTransport certificate helper:
+```text
+tmp/quicsilver/webtransport/localhost.pem
+tmp/quicsilver/webtransport/localhost-key.pem
+```
+
+When `mkcert -CAROOT` exposes `rootCA.pem` and `rootCA-key.pem`, the leaf is signed
+by that trusted local root. If mkcert is unavailable, the helper falls back to a
+self-signed leaf. The fallback still works for WebTransport pinning, but normal
+page/asset H3 upgrades will not be trusted.
+
+Use the object API:
 
 ```ruby
 certificate = Quicsilver::Rails::DevWebTransportCertificate.fetch
-
 certificate.cert_file # tmp/quicsilver/webtransport/localhost.pem
 certificate.key_file  # tmp/quicsilver/webtransport/localhost-key.pem
-certificate.sha256    # base64 SHA-256 of the DER certificate
+certificate.sha256    # base64 SHA-256 of the DER leaf
 ```
 
-Use that certificate when booting Quicsilver in development:
+### 2. Generate the cert before the servers bind, and use it for both
+
+Puma parses its `ssl://...?cert=` bind **before** Rails boots, so the file must
+exist first. Generate it at the top of `bin/dev`:
+
+```bash
+#!/usr/bin/env bash
+set -e
+# One shared H3/WebTransport dev cert, signed by the mkcert root.
+bin/rails runner "Quicsilver::Rails::DevWebTransportCertificate.fetch"
+exec foreman start -f Procfile.dev "$@"
+```
+
+`Procfile.dev` — point **both** listeners at the one cert:
+
+```procfile
+web: bin/rails server -b 'ssl://127.0.0.1:3000?key=tmp/quicsilver/webtransport/localhost-key.pem&cert=tmp/quicsilver/webtransport/localhost.pem'
+h3:  bin/quicsilver
+css: bin/rails tailwindcss:watch
+```
+
+`bin/quicsilver` uses the same helper (idempotent — reuses the file `bin/dev` wrote):
 
 ```ruby
-certificate = Quicsilver::Rails::DevWebTransportCertificate.fetch
+if Rails.env.development?
+  certificate = Quicsilver::Rails::DevWebTransportCertificate.fetch
+  cert_file = certificate.cert_file
+  key_file = certificate.key_file
+else
+  cert_file = ENV.fetch("TLS_CERT_FILE")
+  key_file  = ENV.fetch("TLS_KEY_FILE")
+end
 
-configuration = Quicsilver::Transport::Configuration.new(
-  certificate.cert_file,
-  certificate.key_file,
-  idle_timeout_ms: 120_000,
-  keep_alive_interval_ms: 20_000,
-  max_unidirectional_streams: 100
-)
-
-Quicsilver::Server.new(
-  Integer(ENV.fetch("QUICSILVER_PORT", "4433")),
-  address: ENV.fetch("QUICSILVER_HOST", "0.0.0.0"),
-  app: Rails.application,
-  server_configuration: configuration
-).start
+Quicsilver::Transport::Configuration.new(cert_file, key_file,
+  idle_timeout_ms: 120_000, keep_alive_interval_ms: 20_000, max_unidirectional_streams: 100)
 ```
 
-Add the certificate hash meta tag to your layout in development:
+### 3. Advertise HTTP/3 so page & assets upgrade
+
+Keep the Alt-Svc header from the TCP origin — now it's honest, because the H3
+endpoint presents a trusted cert:
+
+```ruby
+# config/environments/development.rb
+config.quicsilver.alt_svc = { port: ENV.fetch("QUICSILVER_PORT", 4433).to_i, max_age: 3600 }
+# => Alt-Svc: h3=":4433"; ma=3600
+```
+
+Chrome loads the page over TCP once, sees Alt-Svc, and moves subsequent same-origin
+fetches to HTTP/3 on `:4433`. First paint may show `http/1.1`; reload and the
+Network tab shows `h3`.
+
+### 4. One connect helper (keeps pinning as a safety net)
+
+Because the cert is now CA-trusted, WebTransport works in CA mode without hashes.
+Keeping the pin costs nothing and makes it bulletproof if Chrome is fussy about the
+local root on the QUIC path:
 
 ```erb
 <%= quicsilver_webtransport_certificate_meta_tag %>
 ```
 
-It renders:
-
-```html
-<meta name="quicsilver-webtransport-certificate-sha256" content="BASE64_SHA256">
-```
-
-The JavaScript helper reads that tag automatically. In development it passes `serverCertificateHashes`; in production, where the tag is absent, it uses normal CA / PKI mode.
-
 ```js
-import { connect } from "quicsilver/web_transport"
-
-const transport = await connect("https://localhost:4433/transports/echo")
+export function connectWebTransport(path) {
+  const meta = document.querySelector('meta[name="quicsilver-webtransport-certificate-sha256"]')
+  const url = new URL(path, location.href)
+  url.protocol = "https:"
+  url.port = "4433"
+  const options = {}
+  if (meta) {
+    const value = Uint8Array.from(atob(meta.content), c => c.charCodeAt(0))
+    options.serverCertificateHashes = [{ algorithm: "sha-256", value }]
+  }
+  return new WebTransport(url.toString(), options)
+}
 ```
 
-A typical development process uses mkcert for the page and the Quicsilver dev certificate for WebTransport:
+### Optional: same numeric port for TCP and UDP
 
-```procfile
-web: bin/rails server -b 'ssl://127.0.0.1:3000?key=config/certs/localhost-key.pem&cert=config/certs/localhost.pem'
-h3: bin/quicsilver
-css: bin/rails tailwindcss:watch
-```
+Running Puma (TCP) and Quicsilver (UDP) both on `:3443` mirrors production and lets
+the page and WebTransport share one origin. It is **not required** to get H3 for
+assets — a trusted cert on `:4433` + Alt-Svc already does that. (Note: browsing
+directly to `https://localhost:4433/` will always show `ERR_CONNECTION_REFUSED`
+when only Quicsilver is there, because that's a TCP attempt to a UDP-only port.
+That's expected and irrelevant — you navigate to the page origin, not the H3 port.)
+
+---
 
 ## Production
 
-Do not use `serverCertificateHashes` in production. Use CA / PKI mode with a publicly trusted certificate, such as Let's Encrypt.
+Drop pinning entirely and use **CA mode** with a **real, publicly-trusted
+certificate** (Let's Encrypt, your org CA). WebTransport verifies exactly like
+normal HTTPS. Public CAs already give you everything WebTransport wants: a trusted
+chain, Certificate Transparency SCTs, ≤398-day validity, correct SANs,
+`serverAuth` EKU.
 
-Recommended topology:
+Recommended topology — TCP and UDP on the **same host:port**, same cert:
 
 ```text
-TCP/TLS HTTPS page server :443  -> Rails page + Alt-Svc
-UDP/QUIC Quicsilver      :443  -> HTTP/3 + WebTransport
-```
-
-TCP and UDP can share the same port number. Use the same public certificate and key for both servers. Serve `Alt-Svc` from the TCP origin so normal page traffic can upgrade to HTTP/3:
-
-```http
+Puma  (TCP/TLS, HTTP/1.1+2) :443   ← page + Alt-Svc
+Quicsilver (UDP/QUIC, H3)   :443   ← HTTP/3 + WebTransport
 Alt-Svc: h3=":443"; ma=86400
 ```
 
-Point Quicsilver at the full certificate chain and private key:
-
 ```ruby
 Quicsilver::Transport::Configuration.new(
-  ENV.fetch("TLS_CERT_FILE"), # e.g. fullchain.pem
-  ENV.fetch("TLS_KEY_FILE")
+  ENV.fetch("TLS_CERT_FILE"), # fullchain.pem (leaf + intermediates)
+  ENV.fetch("TLS_KEY_FILE")   # privkey.pem
 )
 ```
 
-Use the full chain, not only the leaf certificate, so clients can build trust correctly.
+Production gotchas:
+
+- **UDP must be open and forwarded.** QUIC is UDP; many managed L7 load balancers
+  don't do QUIC/UDP passthrough. Terminate QUIC where you can reach UDP directly.
+- **No `serverCertificateHashes` in prod** — public certs exceed 14 days and pinning
+  would break on every renewal.
+- **WebTransport dials the URL authority directly** over QUIC; it does not rely on
+  Alt-Svc (that's only for upgrading normal page traffic).
+- **Reload the H3 process on cert renewal**, same as any TLS server.
+
+---
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
+| Symptom | Cause | Fix |
 | --- | --- | --- |
-| `WebTransportError: Opening handshake failed` with `QUIC_TLS_CERTIFICATE_UNKNOWN` | Chrome's WebTransport path does not trust the certificate | In development, use the Quicsilver dev certificate + meta tag. In production, use a publicly trusted certificate. |
-| `curl --http3` works but browser WebTransport fails | You are relying on local/private CA trust in Chrome's WebTransport path | Use pinning mode locally. |
-| Pinning still fails | Certificate is RSA or valid for more than 14 days | Regenerate as ECDSA P-256 with validity less than or equal to 14 days. |
-| Production H3 does not connect | UDP is blocked or not forwarded | Open and forward UDP on the QUIC port. |
-| Production breaks after certificate renewal | H3 process still serves the old certificate | Restart or reload Quicsilver when the certificate rotates. |
+| Page loads, but Network tab shows `http/1.1` for document/assets | H3 endpoint cert isn't trusted, so Chrome won't honor Alt-Svc | Serve the mkcert-root-signed EC leaf on the H3 port (above); reload. |
+| WebTransport `QUIC_TLS_CERTIFICATE_UNKNOWN` with mkcert | RSA + multi-year leaf; WebTransport rejects that shape | Issue an EC P-256, ≤14-day leaf. |
+| WebTransport works but assets still HTTP/1.1 | H3 cert is self-signed (pin-only, untrusted) | Sign the leaf with the mkcert root so it's also CA-trusted. |
+| `https://localhost:4433/` → `ERR_CONNECTION_REFUSED` | TCP request to a UDP-only port | Expected. Navigate to the page origin; Alt-Svc handles H3. |
+| Pinning still rejected | Leaf is RSA or > 14 days | Regenerate EC `prime256v1`, ≤14 days. |
+| Prod H3 dead | UDP blocked/not forwarded | Open UDP end to end. |
 
-`openssl s_client` cannot inspect QUIC endpoints. Use curl with HTTP/3 support:
+Inspect what an H3 endpoint serves (no `openssl s_client` — it can't speak QUIC):
 
 ```bash
 curl --http3 -v https://localhost:4433/ 2>&1 | grep -iA15 'server certificate'
 ```
 
-Inspect a local WebTransport development certificate:
+---
 
-```bash
-openssl x509 -in tmp/quicsilver/webtransport/localhost.pem -noout -text | grep -iE 'public key algorithm|not after'
-openssl x509 -in tmp/quicsilver/webtransport/localhost.pem -outform der | openssl dgst -sha256 -binary | openssl base64
-```
+## FAQ
+
+**Can one local cert give page/assets + WebTransport over H3, no flags, no manual
+hashes?** Yes — an EC P-256, ≤14-day leaf signed by your locally-trusted mkcert
+root. That's the whole point of this setup.
+
+**Was mkcert the problem, or private roots in general?** mkcert's **leaf shape**
+(RSA + multi-year), not private roots. Chrome trusts the mkcert *root*; it rejected
+the *leaf* because WebTransport doesn't get the local-root policy waiver that plain
+navigations do. A short-lived EC leaf from the same root satisfies both.
+
+**Does the `:3000` vs `:4433` port difference matter?** No. Alt-Svc advertises H3 on
+a different port for the same origin; that's normal. The old errors were cert
+errors, not origin errors.
+
+**Do I need `serverCertificateHashes` at all now?** Not strictly — CA mode works
+once the leaf is trusted. Keeping it is a harmless safety net for local QUIC
+verifier quirks. Never use it in production.
+
+**Should I confirm it's actually on H3?** Yes — reload `https://localhost:3000/` and
+check the Network tab's Protocol column shows `h3` for the document and assets.
+First hit is TCP; the upgrade lands on reload.
