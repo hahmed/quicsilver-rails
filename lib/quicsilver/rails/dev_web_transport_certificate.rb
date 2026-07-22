@@ -58,7 +58,7 @@ module Quicsilver
           OpenSSL::X509::Certificate.new(File.read(cert_file))
         end
 
-        HOSTS = %w[localhost 127.0.0.1 ::1].freeze
+        DEFAULT_HOSTS = %w[localhost 127.0.0.1 ::1].freeze
 
         def generate!
           FileUtils.mkdir_p(directory)
@@ -91,7 +91,11 @@ module Quicsilver
         end
 
         def subject_alt_name
-          HOSTS.map { |host| ip_address?(host) ? "IP:#{host}" : "DNS:#{host}" }.join(",")
+          dev_hosts.map { |host| ip_address?(host) ? "IP:#{host}" : "DNS:#{host}" }.join(",")
+        end
+
+        def dev_hosts
+          ENV.fetch("QUICSILVER_DEV_HOSTS", DEFAULT_HOSTS.join(",")).split(",").map(&:strip).reject(&:empty?)
         end
 
         def ip_address?(host)
