@@ -2,13 +2,17 @@
 
 Warning: early experiment.
 
-Rails integration experiments for [Quicsilver](https://github.com/hahmed/quicsilver), a Ruby HTTP/3/WebTransport server.
+Rails integration for [Quicsilver](https://github.com/hahmed/quicsilver), a Ruby QUIC and HTTP/3 server.
 
-The core `quicsilver` gem owns the HTTP/3, QUIC, and WebTransport protocol primitives. `quicsilver-rails` provides Rails-shaped integration points: routing helpers, Rails executor wrapping, endpoint base classes, Action Cable experiments, codecs/framing, JavaScript helpers, and Alt-Svc middleware.
+`quicsilver-rails` adds Rails-shaped integration points to make it easier to get started: Alt-Svc middleware, Rails executor wrapping, local development certificate helpers, WebTransport routing helpers, endpoint base classes, browser JavaScript helpers, and an experimental Action Cable socket adapter.
 
-```ruby
-session = Quicsilver::WebTransport.from_env(request.env)
-```
+## What works today
+
+- Advertise HTTP/3 from an existing HTTPS Rails app with `Alt-Svc`.
+- Serve the same Rails Rack app over HTTP/3 with Quicsilver.
+- Use normal Rails controllers, middleware, views, and assets over H3.
+- Run local TCP HTTPS and UDP HTTP/3 on the same host and port.
+- Add experimental WebTransport endpoints for browser realtime streams.
 
 ## Installation
 
@@ -25,28 +29,20 @@ Then run:
 bundle install
 ```
 
-Mount an endpoint in `config/routes.rb`:
-
-```ruby
-Rails.application.routes.draw do
-  webtransport "/echo", to: EchoTransport
-end
-```
-
 ## HTTP/3 discovery with Alt-Svc
 
-Browsers do not upgrade HTTP/1.1 to HTTP/3 using an `Upgrade:` header. HTTP/3 is discovered through `Alt-Svc`:
+HTTP/3 is discovered through `Alt-Svc`:
 
 ```http
-Alt-Svc: h3=":3000"; ma=86400
+Alt-Svc: h3=":443"; ma=86400
 ```
 
-A typical local setup has two listeners for the same Rails app:
+A typical setup has two listeners for the same Rails app:
 
-- HTTPS over TCP for the first page load, usually Falcon/Puma/reverse proxy
-- HTTP/3 over UDP served by Quicsilver
+- HTTPS over TCP for normal browser discovery, usually Puma/Falcon/reverse proxy.
+- HTTP/3 over UDP served by Quicsilver.
 
-Enable the provided middleware in development:
+Enable the provided middleware:
 
 ```ruby
 # config/environments/development.rb
@@ -56,13 +52,136 @@ config.quicsilver.alt_svc = {
 }
 ```
 
-You can also use the default options:
+Or use default options:
 
 ```ruby
 config.quicsilver.alt_svc = true
 ```
 
-For local Chrome testing with a development CA, you will often need to force QUIC for the origin to avoid local-certificate and cached Alt-Svc backoff issues:
+Verify the TCP response advertises HTTP/3:
+
+```bash
+curl -I https://quicsilver.test:3000/ | grep -i alt-svc
+```
+
+Expected:
+
+```text
+alt-svc: h3=":3000"; ma=86400
+```
+
+Then verify direct HTTP/3:
+
+```bash
+curl --http3 -I https://quicsilver.test:3000/
+```
+
+Expected:
+
+```text
+HTTP/3 200
+```
+
+## Local development certificates
+
+Browser HTTP/3 and WebTransport require HTTPS. In development, generate one shared certificate and use it for both your TCP HTTPS server and Quicsilver's UDP HTTP/3 server.
+
+Install and trust a local development CA once:
+
+```bash
+mkcert -install
+```
+
+Generate/cache the certificate before starting your servers:
+
+```bash
+bin/rails runner "Quicsilver::Rails::DevWebTransportCertificate.fetch"
+```
+
+The helper writes:
+
+```text
+tmp/quicsilver/webtransport/localhost.pem
+tmp/quicsilver/webtransport/localhost-key.pem
+```
+
+Use those files for Puma's HTTPS bind:
+
+```procfile
+# Procfile.dev
+web: bin/rails server -b 'ssl://127.0.0.1:3443?key=tmp/quicsilver/webtransport/localhost-key.pem&cert=tmp/quicsilver/webtransport/localhost.pem'
+```
+
+Use the same files when starting Quicsilver:
+
+```ruby
+# bin/quicsilver
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+ENV["RAILS_ENV"] ||= "development"
+
+require_relative "../config/environment"
+require "quicsilver"
+require "quicsilver/rails/dev_web_transport_certificate"
+
+host = ENV.fetch("QUICSILVER_HOST", "0.0.0.0")
+port = Integer(ENV.fetch("QUICSILVER_PORT", "3443"))
+certificate = Quicsilver::Rails::DevWebTransportCertificate.fetch
+
+configuration = Quicsilver::Transport::Configuration.new(
+  certificate.cert_file,
+  certificate.key_file,
+  idle_timeout_ms: 120_000,
+  keep_alive_interval_ms: 20_000,
+  max_unidirectional_streams: 100
+)
+
+server = Quicsilver::Server.new(
+  port,
+  address: host,
+  app: Rails.application,
+  server_configuration: configuration
+)
+
+server.start
+```
+
+Then run both processes:
+
+```procfile
+# Procfile.dev
+web: bin/rails server -b 'ssl://127.0.0.1:3443?key=tmp/quicsilver/webtransport/localhost-key.pem&cert=tmp/quicsilver/webtransport/localhost.pem'
+h3: bin/quicsilver
+```
+
+TCP and UDP can use the same numeric port, which mirrors production:
+
+```text
+Puma TCP HTTPS:        127.0.0.1:3443
+Quicsilver UDP HTTP/3: 127.0.0.1:3443
+```
+
+The helper signs with the local `mkcert` root when available, and falls back to self-signed certificates. To include custom local hostnames in the generated certificate, set `QUICSILVER_DEV_HOSTS` before generating it:
+
+```bash
+QUICSILVER_DEV_HOSTS=localhost,quicsilver.test,127.0.0.1,::1 \
+  bin/rails runner "Quicsilver::Rails::DevWebTransportCertificate.fetch"
+```
+
+If you use WebTransport in development, add the helper meta tag to your layout:
+
+```erb
+<%= quicsilver_webtransport_certificate_meta_tag %>
+```
+
+The included JavaScript helper reads this tag and passes `serverCertificateHashes` to `new WebTransport(...)` in development. Production does not render this tag and uses normal public TLS validation.
+
+See [`docs/webtransport-certificates.md`](docs/webtransport-certificates.md) for details.
+
+## Running HTTP/3 locally in Chrome
+
+For local Chrome testing with a private development CA, you may need to force QUIC for the origin:
 
 ```bash
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
@@ -71,9 +190,21 @@ For local Chrome testing with a development CA, you will often need to force QUI
   https://quicsilver.test:3000/
 ```
 
-## Minimal echo endpoint
+This is a local development workaround. Production deployments with a publicly trusted certificate and normal `Alt-Svc` should not need this flag.
 
-A reliable bidirectional stream is the simplest first smoke test. The browser creates one WebTransport bidirectional stream, sends one length-prefixed JSON message, and receives one length-prefixed JSON response.
+## Experimental WebTransport endpoint
+
+WebTransport support is early, but useful for trying browser-native bidirectional streams over HTTP/3.
+
+Mount an endpoint in `config/routes.rb`:
+
+```ruby
+Rails.application.routes.draw do
+  webtransport "/echo", to: EchoTransport
+end
+```
+
+Define a transport:
 
 ```ruby
 # app/transports/echo_transport.rb
@@ -87,14 +218,7 @@ class EchoTransport < Quicsilver::WebTransport::MessageStreamEndpoint
 end
 ```
 
-```ruby
-# config/routes.rb
-Rails.application.routes.draw do
-  webtransport "/echo", to: EchoTransport
-end
-```
-
-The JavaScript helper included with this gem handles the 4-byte big-endian length prefix used by `Quicsilver::WebTransport::FramedStream`:
+Use the browser helper:
 
 ```js
 import { connect, openMessageStream } from "quicsilver/web_transport"
@@ -112,157 +236,26 @@ for await (const message of stream.responses()) {
 transport.close()
 ```
 
-A successful end-to-end smoke should show the browser resolving `transport.ready`, Quicsilver parsing an HTTP/3 Extended CONNECT request with `:protocol = webtransport`, Rails routing to the endpoint, and the endpoint logging the received message.
+The helper handles the 4-byte length-prefixed JSON framing used by `Quicsilver::WebTransport::FramedStream`.
 
-## Current low-level shape
+## Experimental Action Cable adapter
 
-Quicsilver core exposes raw WebTransport primitives. A Rails controller or Rack endpoint can accept a session and hand it to application code:
-
-```ruby
-class WebTransportsController < ApplicationController
-  def show
-    session = Quicsilver::WebTransport.from_env(request.env)
-    return head :upgrade_required unless session
-
-    session.accept!
-
-    Thread.new do
-      Rails.application.executor.wrap do
-        session.on_datagram do |packet|
-          session.send_datagram(packet)
-        end
-      ensure
-        session.close
-      end
-    end
-
-    head :ok
-  end
-end
-```
-
-That is deliberately low-level. It proves the Rack/Rails capability seam, but it is not the final Rails API.
-
-## Direction
-
-Instead of one big WebTransport class, this gem experiments with small endpoint base classes for each transport shape. WebTransport is interesting because it is not just "WebSockets over HTTP/3". It exposes the same transport shapes described by the WebTransport and QUIC specs: unreliable datagrams, reliable unidirectional streams, and reliable bidirectional streams.
-
-### Datagrams: unreliable, unordered messages
-
-WebTransport datagrams are defined as unreliable and unordered. They can be dropped by the network or by congestion control, and the receiver must tolerate loss. That makes them appropriate only for state where a newer update supersedes an older one.
-
-Real-world uses include:
-
-- WebRTC-style media/control data where low latency is more important than retransmitting stale packets
-- multiplayer or simulation state snapshots where the next snapshot replaces the previous one
-- collaborative cursor or pointer positions where losing an intermediate position is acceptable
-- high-frequency sensor or telemetry samples where the application aggregates over time
-
-They are the wrong fit for business events, chat messages, checkout/payment operations, audit trails, or any application write that must be observed exactly once.
-
-```ruby
-class CursorTransport < Quicsilver::WebTransport::DatagramEndpoint
-  codec :json
-
-  def receive(cursor)
-    broadcast_cursor cursor
-  end
-end
-```
-
-### Reliable bidirectional streams: ordered application messages
-
-A WebTransport bidirectional stream is reliable and ordered within that stream. It is the closest fit when replacing a WebSocket-style pipe, because both client and server can send application messages over the same reliable channel.
-
-Real-world uses include:
-
-- Action Cable traffic, where Rails already multiplexes channels and subscriptions at the application layer
-- chat, comments, and notifications where messages must not silently disappear
-- collaborative editing operations where ordering matters
-- session control messages such as subscribe, unsubscribe, acknowledge, or reconnect state
-
-The trade-off is that reliability is not free: delayed data on a stream can delay later data on that same stream. For state that becomes obsolete quickly, prefer datagrams. For state the application must process in order, use a reliable stream.
-
-```ruby
-class ChatStream < Quicsilver::WebTransport::MessageStreamEndpoint
-  codec :json
-
-  def receive(message)
-    Chat.broadcast(message)
-  end
-end
-```
-
-### RPC over a bidirectional stream: one command, one result
-
-A reliable bidirectional stream can also be used as a request/response exchange: the client sends one command and the server sends one result. This is useful for protocol-level operations that are part of a live WebTransport session rather than a separate HTTP request.
-
-Real-world uses include:
-
-- opening or resuming a realtime subscription and returning the accepted server state
-- applying a collaborative document operation and returning the committed revision
-- acknowledging delivery or synchronization checkpoints
-- negotiating capabilities, codecs, or channel membership inside an already-established session
-
-These operations should still be implemented like normal Rails writes: authorize them, validate inputs, use idempotency keys where retries are possible, and persist durable state in the database.
-
-```ruby
-class ApplyOperation < Quicsilver::WebTransport::RpcEndpoint
-  codec :json
-
-  def perform(operation)
-    document.apply(operation)
-  end
-end
-```
-
-### Server streaming: reliable progressive output
-
-A WebTransport unidirectional stream is reliable and ordered, but only one side writes to it. That maps naturally to server-produced output where the client starts or joins some work and then receives a sequence of chunks.
-
-Real-world uses include:
-
-- token-by-token AI responses, the same interaction shape used by streaming LLM APIs
-- progress output for imports, exports, backups, or deploy/build logs
-- tailing logs or other append-only operational output
-- streaming query/search results where partial results are useful before the full set is ready
-
-Unlike datagrams, these messages are not disposable. Unlike a general bidirectional message stream, the lifecycle is usually tied to one server-produced result stream.
-
-```ruby
-class CompletionStream < Quicsilver::WebTransport::ServerStreamingEndpoint
-  codec :json
-
-  def perform(request)
-    Ai.tokens(request.fetch("prompt"))
-  end
-end
-```
-
-### Picking a transport
-
-| Shape | WebTransport primitive | Delivery | Use it when |
-| --- | --- | --- | --- |
-| Datagram endpoint | Datagram | unreliable, unordered | newer state replaces older state |
-| Message stream endpoint | Bidirectional stream | reliable, ordered | both sides exchange messages that must arrive in order |
-| RPC endpoint | Bidirectional stream | reliable request/response | a session command needs a structured result |
-| Server streaming | Unidirectional stream | reliable, ordered server output | the server emits progressive chunks |
-
-The base classes accept the WebTransport session, run the receive loop, decode messages, encode responses, wrap work in the Rails executor, and close the session. The gem can experiment with this shape before upstreaming missing primitives back into `quicsilver`.
-
-## Action Cable seam
-
-The first compatibility target is Action Cable over one reliable WebTransport bidirectional stream:
+`quicsilver-rails` includes an experimental Action Cable socket adapter over one reliable WebTransport bidirectional stream:
 
 ```ruby
 socket = ActionCable::Server::Socket::WebTransport.new(env, event_target)
 ```
 
-This adapter shape mirrors Action Cable's internal socket adapter API (`possible?`, `alive?`, `transmit`, `close`, `protocol`, `rack_response`). It is intentionally narrow: Action Cable keeps its own channel multiplexing and JSON protocol; Quicsilver only supplies the reliable WebTransport pipe.
+This targets Rails' internal socket seam and is not yet the recommended production path.
 
-Because WebTransport streams are byte streams, the adapter uses a small length-prefixed framing layer before handing messages to Action Cable. This replaces WebSocket frame parsing; it does not use Action Cable's Rack-hijack/WebSocket event loop.
+## Demo app
 
-The Action Cable adapter is still experimental and targets Rails' internal socket seam. Treat it as a compatibility experiment until there is a browser-backed Action Cable smoke test.
+See [`quicsilver-playground`](https://github.com/hahmed/quicsilver-playground) for a full local Rails demo with:
+
+- TCP HTTPS and UDP HTTP/3 on the same host and port.
+- ordinary Rails page/assets over HTTP/3.
+- `Alt-Svc` verification.
+- browser WebTransport echo.
 
 ## Development
 
@@ -271,12 +264,6 @@ After checking out the repo, run:
 ```bash
 bin/setup
 bundle exec rake test
-```
-
-You can also run:
-
-```bash
-bin/console
 ```
 
 ## Status
