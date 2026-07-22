@@ -192,51 +192,18 @@ For local Chrome testing with a private development CA, you may need to force QU
 
 This is a local development workaround. Production deployments with a publicly trusted certificate and normal `Alt-Svc` should not need this flag.
 
-## Experimental WebTransport endpoint
+## Experimental WebTransport endpoints
 
-WebTransport support is early, but useful for trying browser-native bidirectional streams over HTTP/3.
-
-Mount an endpoint in `config/routes.rb`:
+WebTransport support is early, but useful for browser-native realtime streams over HTTP/3. Apps explicitly mount the endpoints they want:
 
 ```ruby
+# config/routes.rb
 Rails.application.routes.draw do
-  webtransport "/echo", to: EchoTransport
+  webtransport "/transports/echo", to: EchoTransport
 end
 ```
 
-Define a transport:
-
-```ruby
-# app/transports/echo_transport.rb
-class EchoTransport < Quicsilver::WebTransport::MessageStreamEndpoint
-  codec :json
-
-  def receive(message)
-    Rails.logger.info("[echo] #{message.inspect}")
-    { echo: message }
-  end
-end
-```
-
-Use the browser helper:
-
-```js
-import { connect, openMessageStream } from "quicsilver/web_transport"
-
-const transport = await connect("https://quicsilver.test:3000/echo")
-const stream = await openMessageStream(transport)
-
-await stream.send({ hello: "world" })
-
-for await (const message of stream.responses()) {
-  console.log(message)
-  break
-}
-
-transport.close()
-```
-
-The helper handles the 4-byte length-prefixed JSON framing used by `Quicsilver::WebTransport::FramedStream`.
+See [`docs/webtransport-endpoints.md`](docs/webtransport-endpoints.md) for endpoint setup, Rails conventions, browser JavaScript helpers, and examples for message streams, RPC, server streaming, and datagrams.
 
 ## Experimental Action Cable adapter
 
@@ -256,6 +223,11 @@ See [`quicsilver-playground`](https://github.com/hahmed/quicsilver-playground) f
 - ordinary Rails page/assets over HTTP/3.
 - `Alt-Svc` verification.
 - browser WebTransport echo.
+
+## More documentation
+
+- [`docs/webtransport-endpoints.md`](docs/webtransport-endpoints.md) — route setup, endpoint classes, browser helpers, and examples.
+- [`docs/webtransport-certificates.md`](docs/webtransport-certificates.md) — local HTTPS/WebTransport certificates and browser behavior.
 
 ## Development
 
