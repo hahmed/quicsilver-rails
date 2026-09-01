@@ -15,6 +15,11 @@ module Quicsilver
           streams[type.to_s] = to
         end
 
+        def datagram(&block)
+          @datagram_handler = block if block
+          @datagram_handler
+        end
+
         def commands
           @commands ||= superclass.respond_to?(:commands) ? superclass.commands.dup : {}
         end
@@ -31,7 +36,12 @@ module Quicsilver
       private
         def run
           each_stream { |raw_stream| handle_stream(raw_stream) }
+          each_datagram { |packet| handle_datagram(packet) } if self.class.datagram
           wait_for_session_close
+        end
+
+        def handle_datagram(packet)
+          instance_exec(packet, &self.class.datagram)
         end
 
         def dispatcher

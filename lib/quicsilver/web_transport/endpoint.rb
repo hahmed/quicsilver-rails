@@ -67,6 +67,12 @@ module Quicsilver
         end
       end
 
+      def each_datagram(&block)
+        session.on_datagram do |packet|
+          spawn(:datagram) { block.call(packet) }
+        end
+      end
+
       def spawn(kind = :task, &block)
         runner.spawn(kind, executor: executor, source: "quicsilver.webtransport.#{kind}", &block)
       end

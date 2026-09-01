@@ -50,6 +50,19 @@ class QuicsilverWebTransportChannelTest < Minitest::Test
     end
   end
 
+  class DropChannel < Quicsilver::WebTransport::Channel
+    attr_reader :datagrams
+
+    def initialize(*)
+      super
+      @datagrams = []
+    end
+
+    datagram do |packet|
+      datagrams << packet
+    end
+  end
+
   def test_dispatches_command_streams_by_message_type
     raw_stream = RawStream.new(JSON.generate(type: "reaction", emoji: "🔥"))
 
@@ -75,6 +88,14 @@ class QuicsilverWebTransportChannelTest < Minitest::Test
 
     assert raw_stream.closed
     assert_equal [{ "type" => "error", "error" => "Unknown WebTransport message type: unknown" }], written_messages(raw_stream)
+  end
+
+  def test_handles_datagrams_in_channel_context
+    channel = DropChannel.new({})
+
+    channel.send(:handle_datagram, "hype")
+
+    assert_equal ["hype"], channel.datagrams
   end
 
   private
