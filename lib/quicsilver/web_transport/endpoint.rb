@@ -31,7 +31,7 @@ module Quicsilver
 
         connect
         session.accept!
-        spawn { run }
+        spawn(:session) { run }
 
         accepted
       rescue => error
@@ -61,8 +61,14 @@ module Quicsilver
         nil
       end
 
-      def spawn(&block)
-        runner.spawn(executor: executor, source: "quicsilver.webtransport", &block)
+      def each_stream(&block)
+        session.on_stream do |raw_stream|
+          spawn(:stream) { block.call(raw_stream) }
+        end
+      end
+
+      def spawn(kind = :task, &block)
+        runner.spawn(kind, executor: executor, source: "quicsilver.webtransport.#{kind}", &block)
       end
 
       def runner

@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
-require "action_cable/connection/client_socket"
+begin
+  require "action_cable/connection/client_socket"
+rescue LoadError
+  require "action_cable/server/socket"
+end
+
 require "quicsilver/web_transport/framed_stream"
 require "action_cable/server/socket/web_transport"
 

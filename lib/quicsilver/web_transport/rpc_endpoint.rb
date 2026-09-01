@@ -45,9 +45,7 @@ module Quicsilver
       private
 
       def run
-        session.on_stream do |raw_stream|
-          spawn { handle_stream(raw_stream) }
-        end
+        each_stream { |raw_stream| handle_stream(raw_stream) }
 
         wait_for_session_close
       end

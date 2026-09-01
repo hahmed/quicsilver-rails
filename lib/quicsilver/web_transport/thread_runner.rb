@@ -8,7 +8,7 @@ module Quicsilver
     # default is deliberately boring: one Ruby thread per accepted WebTransport
     # endpoint, with the work wrapped in the Rails executor when available.
     class ThreadRunner
-      def spawn(executor:, source:, &block)
+      def spawn(kind = :task, executor:, source:, &block)
         Thread.new do
           executor.wrap(source: source, &block)
         end

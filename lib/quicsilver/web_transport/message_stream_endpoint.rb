@@ -45,16 +45,6 @@ module Quicsilver
         raise NotImplementedError, "#{self.class} must implement #receive"
       end
 
-      private
-
-      def run
-        session.on_stream do |raw_stream|
-          spawn { handle_stream(raw_stream) }
-        end
-
-        wait_for_session_close
-      end
-
       def handle_stream(raw_stream)
         stream = Quicsilver::WebTransport::FramedStream.new(raw_stream)
 
@@ -66,6 +56,12 @@ module Quicsilver
       ensure
         stream&.close
       end
+
+      private
+        def run
+          each_stream { |raw_stream| handle_stream(raw_stream) }
+          wait_for_session_close
+        end
     end
   end
 end
