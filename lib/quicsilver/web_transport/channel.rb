@@ -2,13 +2,30 @@
 
 require "quicsilver/web_transport/endpoint"
 require "quicsilver/web_transport/codec"
+require "quicsilver/web_transport/message_codec"
 
 module Quicsilver
   module WebTransport
     class Channel < Endpoint
+      include MessageCodec
+
       class << self
         def command(type, to:)
           commands[type.to_s] = to
+        end
+
+        # Wire format for commands, streams and datagrams.
+        #
+        #   class DropChannel < Quicsilver::WebTransport::Channel
+        #     codec :json
+        #   end
+        #
+        # Defaults to :json rather than :raw because channels exchange typed
+        # messages: the dispatcher routes on message["type"], which needs a
+        # structured payload. Subclasses inherit the parent's choice.
+        def codec(value = nil)
+          @codec = value if value
+          @codec || inherited_codec
         end
 
         def stream(type, to:)
@@ -27,6 +44,11 @@ module Quicsilver
         def streams
           @streams ||= superclass.respond_to?(:streams) ? superclass.streams.dup : {}
         end
+
+        private
+          def inherited_codec
+            superclass.respond_to?(:codec) ? superclass.codec : :json
+          end
       end
 
       def handle_stream(raw_stream)
@@ -51,10 +73,6 @@ module Quicsilver
             codec: codec,
             session: session
           )
-        end
-
-        def codec
-          @codec ||= Codec.resolve(:json)
         end
     end
   end

@@ -34,6 +34,66 @@ class QuicsilverWebTransportChannelTest < Minitest::Test
     end
   end
 
+  class RawChannel < Quicsilver::WebTransport::Channel
+    codec :raw
+  end
+
+  class InheritedCodecChannel < RawChannel; end
+
+  class RegistryChannel < Quicsilver::WebTransport::Channel
+    command "reaction", to: ReactionCommand
+    stream "subscribe", to: ActivityStream
+  end
+
+  class ChildRegistryChannel < RegistryChannel
+    command "claim", to: ReactionCommand
+  end
+
+  # === codec ===
+  #
+  # Every other endpoint exposes a codec macro; Channel used to hardcode JSON,
+  # so a channel could not speak msgpack or raw bytes.
+
+  def test_defaults_to_json
+    assert_equal :json, Quicsilver::WebTransport::Channel.codec
+  end
+
+  def test_codec_is_configurable
+    assert_equal :raw, RawChannel.codec
+  end
+
+  def test_subclasses_inherit_the_codec
+    assert_equal :raw, InheritedCodecChannel.codec
+  end
+
+  def test_setting_a_codec_does_not_leak_to_siblings
+    assert_equal :json, DropChannel.codec
+  end
+
+  def test_resolves_the_configured_codec_at_runtime
+    channel = RawChannel.new("quicsilver.webtransport" => Session.new)
+
+    assert_equal Quicsilver::WebTransport::Codec::Raw, channel.send(:codec)
+  end
+
+  def test_resolves_json_by_default_at_runtime
+    channel = DropChannel.new("quicsilver.webtransport" => Session.new)
+
+    assert_equal Quicsilver::WebTransport::Codec::JSON, channel.send(:codec)
+  end
+
+  # === registries ===
+
+  def test_subclasses_inherit_commands_and_streams
+    assert_equal ReactionCommand, ChildRegistryChannel.commands["reaction"]
+    assert_equal ActivityStream, ChildRegistryChannel.streams["subscribe"]
+  end
+
+  def test_subclass_additions_do_not_leak_to_the_parent
+    assert_equal ReactionCommand, ChildRegistryChannel.commands["claim"]
+    refute RegistryChannel.commands.key?("claim")
+  end
+
   def test_dispatches_command_streams_by_message_type
     raw_stream = RawStream.new(JSON.generate(type: "reaction", emoji: "🔥"))
 
