@@ -3,69 +3,9 @@
 require "test_helper"
 
 class QuicsilverWebTransportServerStreamingEndpointTest < Minitest::Test
-  class RawStream
-    attr_reader :writes, :closed
-
-    def initialize(*messages)
-      @reads = Queue.new
-      messages.each do |message|
-        message = message.to_s.b
-        @reads << [message.bytesize].pack("N") + message
-      end
-      @reads.close
-      @writes = []
-      @closed = false
-    end
-
-    def read
-      @reads.pop
-    end
-
-    def write(data)
-      @writes << data
-    end
-
-    def close
-      @closed = true
-    end
-  end
-
-  class Session
-    attr_reader :accepted, :closed
-
-    def initialize(*streams)
-      @streams = streams
-      @accepted = false
-      @closed = false
-    end
-
-    def accept!
-      @accepted = true
-    end
-
-    def on_stream(&block)
-      @streams.each(&block)
-    end
-
-    def on_close(&block)
-      @close_callback = block
-    end
-
-    def close
-      @closed = true
-      @close_callback&.call
-    end
-
-    def open?
-      !@closed
-    end
-
-    def accepted?
-      @accepted
-    end
-  end
-
-  Context = Struct.new(:webtransport, keyword_init: true)
+  RawStream = WebTransportDoubles::RawStream
+  Session = WebTransportDoubles::Session
+  Context = WebTransportDoubles::Context
 
   class CompletionEndpoint < Quicsilver::WebTransport::ServerStreamingEndpoint
     codec :json
@@ -111,16 +51,5 @@ class QuicsilverWebTransportServerStreamingEndpointTest < Minitest::Test
     wait_until { session.closed }
 
     assert_equal [frame(JSON.generate(token: "hi"))], raw_stream.writes
-  end
-
-  private
-
-  def frame(message)
-    [message.bytesize].pack("N") + message
-  end
-
-  def wait_until(timeout: 1)
-    deadline = Time.now + timeout
-    sleep 0.01 until yield || Time.now > deadline
   end
 end

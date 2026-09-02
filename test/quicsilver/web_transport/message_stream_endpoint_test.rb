@@ -3,34 +3,7 @@
 require "test_helper"
 
 class QuicsilverWebTransportMessageStreamEndpointTest < Minitest::Test
-  class RawStream
-    attr_reader :writes, :closed
-
-    def initialize(*messages)
-      @reads = Queue.new
-      messages.each do |message|
-        message = message.to_s.b
-        @reads << [message.bytesize].pack("N") + message
-      end
-      @reads.close
-      @writes = []
-      @closed = false
-    end
-
-    def read
-      @reads.pop
-    rescue ClosedQueueError
-      nil
-    end
-
-    def write(data)
-      @writes << data
-    end
-
-    def close
-      @closed = true
-    end
-  end
+  RawStream = WebTransportDoubles::RawStream
 
   class EchoEndpoint < Quicsilver::WebTransport::MessageStreamEndpoint
     codec :json
@@ -88,9 +61,4 @@ class QuicsilverWebTransportMessageStreamEndpointTest < Minitest::Test
     assert_equal [{ "text" => "one" }], endpoint.received
     assert_empty raw_stream.writes
   end
-
-  private
-    def frame(message)
-      [message.bytesize].pack("N") + message
-    end
 end

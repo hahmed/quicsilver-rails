@@ -14,6 +14,13 @@ def wait_until(timeout: 1)
   sleep 0.01 until yield || Time.now > deadline
 end
 
+# Length-prefixed frame, matching FramedStream's wire format. Useful for
+# asserting on raw writes.
+def frame(message)
+  message = message.to_s.b
+  [message.bytesize].pack("N") + message
+end
+
 # Shared doubles for WebTransport tests.
 #
 # Session and RawStream were previously redefined in every endpoint test with
@@ -21,6 +28,9 @@ end
 # did not behave like the real thing. One definition each, covering the whole
 # surface the endpoints actually call.
 module WebTransportDoubles
+  # Rack env value under "quicsilver.context".
+  Context = Struct.new(:webtransport, keyword_init: true)
+
   # Stands in for Quicsilver::WebTransport::Session.
   class Session
     attr_reader :accepted, :closed, :rejected_with, :datagrams_sent
