@@ -31,7 +31,7 @@ module Quicsilver
 
         connect
         session.accept!
-        spawn(:session) { run }
+        spawn(:session) { run_endpoint }
 
         accepted
       rescue => error
@@ -48,6 +48,10 @@ module Quicsilver
 
       def run
         raise NotImplementedError, "#{self.class} must implement #run"
+      end
+
+      def run_endpoint
+        run
       ensure
         disconnect
         session.close if session.open?
