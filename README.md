@@ -207,13 +207,22 @@ See [`docs/webtransport-endpoints.md`](docs/webtransport-endpoints.md) for endpo
 
 ## Experimental Action Cable adapter
 
-`quicsilver-rails` includes an experimental Action Cable socket adapter over one reliable WebTransport bidirectional stream:
+`quicsilver-rails` can carry Action Cable over one reliable WebTransport bidirectional stream, so
+`turbo_stream_from` works with nothing on TCP. The server adapter plugs into Rails' own socket seam,
+and `quicsilver/action_cable` provides the browser half:
 
-```ruby
-socket = ActionCable::Server::Socket::WebTransport.new(env, event_target)
+```js
+import * as ActionCable from "@rails/actioncable"
+import { cable } from "@hotwired/turbo-rails"
+import { installWebTransportCable } from "quicsilver/action_cable"
+
+if (installWebTransportCable({ ActionCable })) {
+  cable.setConsumer(ActionCable.createConsumer())
+}
 ```
 
-This targets Rails' internal socket seam and is not yet the recommended production path.
+Browsers do not expose WebSockets-over-HTTP/3 to JavaScript, so WebTransport is the only way a
+browser gets realtime over QUIC. See [`docs/action-cable.md`](docs/action-cable.md).
 
 ## Demo app
 
@@ -226,6 +235,7 @@ See [`quicsilver-playground`](https://github.com/hahmed/quicsilver-playground) f
 
 ## More documentation
 
+- [`docs/action-cable.md`](docs/action-cable.md) — Action Cable over WebTransport, browser setup, and limits.
 - [`docs/webtransport-endpoints.md`](docs/webtransport-endpoints.md) — route setup, endpoint classes, browser helpers, and examples.
 - [`docs/local-certificates.md`](docs/local-certificates.md) — local HTTPS, HTTP/3, WebTransport certificates, and browser behavior.
 
@@ -241,3 +251,11 @@ bundle exec rake test
 ## Status
 
 Experimental.
+
+### Readable WebTransport streams
+
+FramedStream now consumes the core stream's `read` interface directly. Update
+quicsilver alongside this change; older callback-only WebTransport streams are
+no longer adapted. The endpoint runner already schedules stream readers on
+application tasks. FIN preserves unread messages; stream resets propagate as
+`Quicsilver::Server::WebTransportStream::ResetError`.
