@@ -37,19 +37,29 @@ export class WebTransportSocket {
   }
 
   send(data) {
-    if (this.readyState !== WebTransportSocket.OPEN) return
+    // A WebSocket throws InvalidStateError here. Connection#send guards on isOpen(), but the monitor
+    // can race it, and a throw would escape into the reconnect loop. Report it and drop the frame.
+    if (this.readyState !== WebTransportSocket.OPEN) {
+      this.onerror?.({ error: new Error(`send on a socket that is ${this.#stateName()}`), target: this })
+      return
+    }
 
     // Deliberately not awaited: Connection#send is synchronous and discards the return value. Write
     // failures surface through the transport's closed promise instead.
     writeFrame(this.#writer, data).catch(error => this.#fail(error))
   }
 
+  // Asks the transport to close. onclose fires when it has, from the closed promise, so the code
+  // and wasClean reflect what the transport reported rather than what was requested.
   close() {
     if (this.readyState === WebTransportSocket.CLOSING || this.readyState === WebTransportSocket.CLOSED) return
 
     this.readyState = WebTransportSocket.CLOSING
-    this.#transport?.close()
-    this.#closed(1000, "")
+    if (this.#transport) {
+      this.#transport.close()
+    } else {
+      this.#closed(1000, "")
+    }
   }
 
   #transport = null
@@ -58,14 +68,15 @@ export class WebTransportSocket {
   async #open() {
     try {
       this.#transport = await connect(httpUrl(this.url))
+      // Attached as soon as the transport exists, before the stream opens: close() in that window
+      // asks the transport to close and relies on this to report it.
+      this.#transport.closed.then(() => this.#closed(1000, "")).catch(error => this.#fail(error))
 
       const stream = await this.#transport.createBidirectionalStream()
       this.#writer = stream.writable.getWriter()
 
       this.readyState = WebTransportSocket.OPEN
       this.onopen?.({ target: this })
-
-      this.#transport.closed.then(() => this.#closed(1000, "")).catch(error => this.#fail(error))
 
       await this.#receive(stream.readable.getReader())
     } catch (error) {
@@ -87,6 +98,10 @@ export class WebTransportSocket {
   #fail(error) {
     this.onerror?.({ error, target: this })
     this.#closed(1006, String(error?.message || error))
+  }
+
+  #stateName() {
+    return Object.keys(WebTransportSocket).find(k => WebTransportSocket[k] === this.readyState)?.toLowerCase()
   }
 
   #closed(code, reason) {

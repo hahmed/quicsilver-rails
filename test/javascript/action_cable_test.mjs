@@ -56,7 +56,7 @@ class FakeWebTransport {
     this.incoming = []
     this.finished = false
     this.ready = Promise.resolve()
-    this.closed = new Promise(resolve => { this.resolveClosed = resolve })
+    this.closed = new Promise((resolve, reject) => { this.resolveClosed = resolve; this.rejectClosed = reject })
     FakeWebTransport.lastInstance = this
   }
 
@@ -141,12 +141,16 @@ test("frames outbound messages the way FramedStream reads them", async () => {
   assert.equal(new TextDecoder().decode(frame.slice(4)), '{"command":"subscribe"}')
 })
 
-test("drops sends made before the stream is open rather than throwing", () => {
+test("a send before the stream is open is reported, not thrown and not silently dropped", () => {
   const socket = new WebTransportSocket("wss://example.com/cable")
+  const errors = []
+  socket.onerror = event => errors.push(event.error)
 
   // Connection#send guards on isOpen(), but the monitor can race it. Throwing here would escape
-  // into Action Cable's reconnect loop.
+  // into Action Cable's reconnect loop; dropping without a word hides the race.
   assert.doesNotThrow(() => socket.send("{}"))
+  assert.equal(errors.length, 1)
+  assert.match(errors[0].message, /connecting/)
 })
 
 test("delivers each frame as a WebSocket-shaped message event", async () => {
@@ -192,6 +196,50 @@ test("close() reports a clean WebSocket close once", async () => {
   assert.equal(closes[0].code, 1000)
   assert.ok(closes[0].wasClean)
   assert.equal(socket.readyState, WebTransportSocket.CLOSED)
+})
+
+test("close() reports what the transport did, so a close that fails is unclean", async () => {
+  const socket = new WebTransportSocket("wss://example.com/cable")
+  await settle()
+  const transport = FakeWebTransport.lastInstance
+  // The transport closes abnormally instead of acknowledging our close.
+  transport.close = () => { transport.finished = true; transport.rejectClosed(new Error("peer aborted")) }
+
+  const closes = []
+  socket.onclose = event => closes.push(event)
+  socket.close()
+  assert.equal(socket.readyState, WebTransportSocket.CLOSING, "onclose must wait for the transport")
+  await settle()
+
+  assert.equal(closes.length, 1)
+  assert.equal(closes[0].code, 1006)
+  assert.equal(closes[0].wasClean, false)
+})
+
+test("close() while the stream is still opening is still reported", async () => {
+  // connect() has resolved but createBidirectionalStream has not: the socket is CONNECTING with a
+  // transport. A navigation during the handshake lands here.
+  let openStream
+  const Pending = class extends FakeWebTransport {
+    createBidirectionalStream() { return new Promise(resolve => { openStream = resolve }) }
+  }
+  globalThis.WebTransport = Pending
+  try {
+    const socket = new WebTransportSocket("wss://example.com/cable")
+    await settle()
+    assert.equal(socket.readyState, WebTransportSocket.CONNECTING)
+
+    const closes = []
+    socket.onclose = event => closes.push(event)
+    socket.close()
+    await settle()
+
+    assert.equal(closes.length, 1, "onclose must fire even though the stream never opened")
+    assert.equal(socket.readyState, WebTransportSocket.CLOSED)
+  } finally {
+    globalThis.WebTransport = FakeWebTransport
+    openStream?.({ writable: { getWriter: () => ({}) }, readable: { getReader: () => ({}) } })
+  }
 })
 
 test("a transport that fails reports an unclean close so the monitor reconnects", async () => {

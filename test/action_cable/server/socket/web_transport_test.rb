@@ -59,13 +59,14 @@ class ActionCableWebTransportSocketTest < Minitest::Test
   end
 
   class Stream
-    attr_reader :writes
+    attr_reader :writes, :closed
 
-    def initialize(*reads)
+    def initialize(*reads, open: false)
       @reads = Queue.new
       reads.each { |read| @reads << frame(read) }
-      @reads.close
+      @reads.close unless open
       @writes = []
+      @closed = false
     end
 
     def read
@@ -77,6 +78,7 @@ class ActionCableWebTransportSocketTest < Minitest::Test
     end
 
     def close
+      @closed = true
       @reads.close unless @reads.closed?
     end
 
@@ -111,6 +113,23 @@ class ActionCableWebTransportSocketTest < Minitest::Test
     assert target.opened
     assert_equal ["hello"], target.messages
     assert target.closed
+  end
+
+  def test_a_second_stream_on_the_session_is_closed_not_left_hanging
+    # Streams built with no reads reach EOF at once, which closes the socket
+    # and would let a second stream attach as a fresh first one.
+    first = Stream.new(open: true)
+    second = Stream.new(open: true)
+    session = Session.new(first)
+    socket = build_socket(session: session, target: EventTarget.new)
+    socket.rack_response
+    session.deliver_stream
+    sleep 0.01
+
+    session.instance_variable_get(:@on_stream).call(second)
+
+    assert second.closed, "a second cable stream must be closed so the client is not left waiting"
+    refute first.closed
   end
 
   def test_transmit_writes_to_webtransport_stream

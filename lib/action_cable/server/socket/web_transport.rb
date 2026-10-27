@@ -92,7 +92,12 @@ module ActionCable
         end
 
         def attach_stream(raw_stream)
-          return if @open
+          # One stream carries the cable protocol. A client that opens another
+          # is told so rather than left waiting on a stream nothing reads.
+          if @open
+            raw_stream.close
+            return
+          end
 
           @raw_stream = raw_stream
           @stream = Quicsilver::WebTransport::FramedStream.new(@raw_stream)
