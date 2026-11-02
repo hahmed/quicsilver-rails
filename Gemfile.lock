@@ -1,18 +1,4 @@
 GIT
-  remote: https://github.com/hahmed/quicsilver.git
-  revision: 8fc31a0bb1736a4fe4798559d2a93c786774c1b6
-  branch: main
-  specs:
-    quicsilver (0.4.0)
-      console
-      localhost (~> 1.6)
-      logger
-      protocol-http (~> 0.49)
-      protocol-rack (~> 0.22)
-      rack (~> 3.0)
-      rackup (~> 2.0)
-
-GIT
   remote: https://github.com/rails/rails.git
   revision: d01305b3fcbbf71e615c8ec77fd9f1d98e442bc9
   branch: main
@@ -122,7 +108,7 @@ PATH
     quicsilver-rails (0.1.0)
       actioncable (>= 7.1)
       actionpack (>= 7.1)
-      quicsilver (>= 0.1.0)
+      quicsilver (~> 0.5.0)
       railties (>= 7.1)
 
 GEM
@@ -207,6 +193,22 @@ GEM
     psych (5.3.1)
       date
       stringio
+    quicsilver (0.5.0-arm64-darwin)
+      console
+      localhost (~> 1.6)
+      logger
+      protocol-http (~> 0.49)
+      protocol-rack (~> 0.22)
+      rack (~> 3.0)
+      rackup (~> 2.0)
+    quicsilver (0.5.0-x86_64-linux)
+      console
+      localhost (~> 1.6)
+      logger
+      protocol-http (~> 0.49)
+      protocol-rack (~> 0.22)
+      rack (~> 3.0)
+      rackup (~> 2.0)
     racc (1.8.1)
     rack (3.2.7)
     rack-session (2.1.2)
@@ -260,7 +262,6 @@ DEPENDENCIES
   irb
   json (< 3.1)
   minitest (~> 5.16)
-  quicsilver!
   quicsilver-rails!
   rails!
   railties!
@@ -322,7 +323,8 @@ CHECKSUMS
   protocol-http (0.72.1) sha256=5b0d718fb5d45ebc2690bf204977bb62d6550773e55c417ee9aa61be032876f3
   protocol-rack (0.23.0) sha256=63eec3341b20565b3dd155345fd1426ecbbed322cdc8a6accc993905388c03d7
   psych (5.3.1) sha256=eb7a57cef10c9d70173ff74e739d843ac3b2c019a003de48447b2963d81b1974
-  quicsilver (0.4.0)
+  quicsilver (0.5.0-arm64-darwin) sha256=b54bfc669233df668f6b5fdbe5540c1a9bb04bc0783f60b55ba339d526c38f82
+  quicsilver (0.5.0-x86_64-linux) sha256=da8772d8ae62533f33ada790c51bf61f7b763bcb6ede8fea8ec35167adf4a1fa
   quicsilver-rails (0.1.0)
   racc (1.8.1) sha256=4a7f6929691dbec8b5209a0b373bc2614882b55fc5d2e447a21aaa691303d62f
   rack (3.2.7) sha256=93e13e1c24f93556671d85d2d79fa228c3485815c50d7e2f265b5330c6528fb7

@@ -14,7 +14,6 @@ github "rails/rails", branch: "main" do
   gem "railties"
 end
 
-gem "quicsilver", github: "hahmed/quicsilver", branch: "main"
 # The pinned Rails main calls JSON.parse(json, options) positionally, which json 3.1 removed.
 # Later Rails main fixes it but needs Ruby 4.0; hold json back until the Ruby bump.
 gem "json", "< 3.1"

@@ -31,5 +31,5 @@ Gem::Specification.new do |spec|
   spec.add_dependency "actioncable", ">= 7.1"
   spec.add_dependency "actionpack", ">= 7.1"
   spec.add_dependency "railties", ">= 7.1"
-  spec.add_dependency "quicsilver", ">= 0.1.0"
+  spec.add_dependency "quicsilver", "~> 0.5.0"
 end
