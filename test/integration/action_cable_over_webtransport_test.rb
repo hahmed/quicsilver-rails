@@ -21,7 +21,7 @@ class ActionCableOverWebTransportTest < Minitest::Test
     identified_by :credential
 
     def connect
-      self.credential = Quicsilver::ActionCable.credential(request) || reject_unauthorized_connection
+      self.credential = quicsilver_cable_credential || reject_unauthorized_connection
     end
   end
 

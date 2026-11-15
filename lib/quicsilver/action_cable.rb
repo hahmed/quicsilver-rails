@@ -21,10 +21,20 @@ module Quicsilver
     #
     #   def find_session
     #     Session.find_signed(cookies.signed[:session_token]) ||
-    #       Session.find_signed(Quicsilver::ActionCable.credential(request), purpose: :cable)
+    #       Session.find_signed(quicsilver_cable_credential, purpose: :cable)
     #   end
     def self.credential(request)
       request.env[CREDENTIAL_ENV_KEY].presence
+    end
+
+    # Included into ActionCable::Connection::Base, so a connection can write
+    #
+    #   Session.find_signed(quicsilver_cable_credential, purpose: :cable)
+    module Connection
+      private
+        def quicsilver_cable_credential
+          Quicsilver::ActionCable.credential(request)
+        end
     end
 
     module SocketSelection
@@ -43,6 +53,7 @@ module Quicsilver
       return if @installed
 
       ::ActionCable::Server::Socket.prepend(SocketSelection)
+      ::ActionCable::Connection::Base.include(Connection)
       @installed = true
     end
   end

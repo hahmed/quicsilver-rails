@@ -11,12 +11,16 @@ module Quicsilver
     #
     #   <%= quicsilver_cable_credential_meta_tag Current.session&.signed_id(purpose: :cable, expires_in: 1.day) %>
     #
-    # Renders nothing for a nil credential, so signed-out pages need no guard.
+    # Renders nothing for a nil credential, so signed-out pages need no guard, and
+    # nothing unless the app advertises HTTP/3 (config.quicsilver.alt_svc), so
+    # the credential is never put in a page that can't use it.
     module CableCredentialHelper
       META_NAME = "quicsilver-cable-credential"
 
       def quicsilver_cable_credential_meta_tag(credential)
-        tag.meta(name: META_NAME, content: credential) if credential.present?
+        if credential.present? && ::Rails.application.config.quicsilver.alt_svc
+          tag.meta(name: META_NAME, content: credential)
+        end
       end
     end
   end

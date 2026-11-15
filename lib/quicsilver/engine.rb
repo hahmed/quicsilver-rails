@@ -20,6 +20,10 @@ module Quicsilver
       app.config.assets.paths << root.join("app/javascript").to_s if app.config.respond_to?(:assets)
     end
 
+    initializer "quicsilver.importmap", before: "importmap" do |app|
+      app.config.importmap.paths << root.join("config/importmap.rb") if app.config.respond_to?(:importmap)
+    end
+
     initializer "quicsilver.alt_svc" do |app|
       next unless app.config.quicsilver.alt_svc
 

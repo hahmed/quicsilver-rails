@@ -9,5 +9,6 @@ require "quicsilver/middleware/alt_svc"
 require "quicsilver/rails/dev_web_transport_certificate"
 require "quicsilver/rails/web_transport_certificate_helper"
 require "quicsilver/rails/cable_credential_helper"
+require "quicsilver/rails/server"
 require "quicsilver/action_cable"
 require "quicsilver/engine" if defined?(::Rails::Railtie)
