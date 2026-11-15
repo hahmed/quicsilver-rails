@@ -6,6 +6,7 @@ rescue LoadError
   require "action_cable/server/socket"
 end
 
+require "json"
 require "quicsilver/web_transport"
 require "quicsilver/web_transport/framed_stream"
 
@@ -26,7 +27,16 @@ module ActionCable
       #
       # It intentionally uses one reliable WebTransport bidirectional stream.
       # Action Cable keeps its own channel multiplexing and JSON protocol.
+      #
+      # Browsers send no cookies on a WebTransport CONNECT, so cookie-based
+      # Action Cable authentication sees an anonymous request and rejects it.
+      # The client therefore opens the stream with one handshake frame carrying
+      # a credential the page rendered, and the connection's #connect reads it
+      # through Quicsilver::ActionCable.credential. It travels in the stream,
+      # not the URL, so it stays out of request logs.
       class WebTransport # :nodoc:
+        HANDSHAKE_KEY = "quicsilver_handshake"
+
         attr_reader :session, :stream
 
         def initialize(env, event_target, event_loop = nil, protocols: self.class.default_protocols)
@@ -94,20 +104,30 @@ module ActionCable
         def attach_stream(raw_stream)
           # One stream carries the cable protocol. A client that opens another
           # is told so rather than left waiting on a stream nothing reads.
-          if @open
+          # Checked against the stream rather than @open, which only flips once
+          # the handshake has been read on the reader thread.
+          if @stream
             raw_stream.close
             return
           end
 
           @raw_stream = raw_stream
           @stream = Quicsilver::WebTransport::FramedStream.new(@raw_stream)
-          @open = true
-          @event_target.on_open
           start_reader
         end
 
         def start_reader
           @reader = Thread.new do
+            # The handshake is read before on_open, because on_open is what
+            # runs the connection's #connect — authentication has to find the
+            # credential already in place. It also means nothing is transmitted
+            # until the client has a stream to receive it on.
+            pending = read_handshake
+
+            @open = true
+            event_target.on_open
+            event_target.on_message(pending) if pending
+
             while alive? && (message = stream.read_message)
               event_target.on_message(message)
             end
@@ -117,6 +137,26 @@ module ActionCable
             @open = false
             event_target.on_close("", 1000)
           end
+        end
+
+        # Reads the client's first frame. The handshake is required: the server
+        # waits for it before running #connect, so a client that waits for
+        # `welcome` first will never get one. A first frame that is not a
+        # handshake is still delivered as a cable message rather than eaten.
+        def read_handshake
+          first = stream.read_message
+          return nil unless first
+
+          payload = JSON.parse(first)
+
+          if payload.is_a?(Hash) && payload.key?(HANDSHAKE_KEY)
+            @env[Quicsilver::ActionCable::CREDENTIAL_ENV_KEY] = payload[HANDSHAKE_KEY]["credential"]
+            nil
+          else
+            first
+          end
+        rescue JSON::ParserError
+          first
         end
       end
     end

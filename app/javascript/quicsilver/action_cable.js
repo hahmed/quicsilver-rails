@@ -75,6 +75,12 @@ export class WebTransportSocket {
       const stream = await this.#transport.createBidirectionalStream()
       this.#writer = stream.writable.getWriter()
 
+      // Always the first frame, so the server can tell it apart from Action Cable traffic. Browsers
+      // send no cookies on a WebTransport CONNECT, so this is the only way the connection's #connect
+      // learns who is asking. Read on every open rather than once: a reconnect should carry the
+      // credential the current page rendered, not the one from page load.
+      await writeFrame(this.#writer, JSON.stringify(handshake()))
+
       this.readyState = WebTransportSocket.OPEN
       this.onopen?.({ target: this })
 
@@ -110,6 +116,12 @@ export class WebTransportSocket {
     this.readyState = WebTransportSocket.CLOSED
     this.onclose?.({ code, reason, wasClean: code === 1000, target: this })
   }
+}
+
+// The handshake frame. The key matches HANDSHAKE_KEY in the Ruby socket.
+export function handshake() {
+  const meta = typeof document !== "undefined" && document.querySelector('meta[name="quicsilver-cable-credential"]')
+  return { quicsilver_handshake: { credential: meta ? meta.content : null } }
 }
 
 // Action Cable builds ws:// and wss:// URLs; WebTransport takes the https:// origin the HTTP/3

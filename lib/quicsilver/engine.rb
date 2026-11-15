@@ -30,6 +30,7 @@ module Quicsilver
     initializer "quicsilver.web_transport_certificate_helper" do
       ActiveSupport.on_load(:action_view) do
         include Quicsilver::Rails::WebTransportCertificateHelper
+        include Quicsilver::Rails::CableCredentialHelper
       end
     end
 

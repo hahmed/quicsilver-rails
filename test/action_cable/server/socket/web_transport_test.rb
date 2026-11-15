@@ -133,18 +133,78 @@ class ActionCableWebTransportSocketTest < Minitest::Test
   end
 
   def test_transmit_writes_to_webtransport_stream
-    stream = Stream.new
+    stream = Stream.new(handshake, open: true)
     session = Session.new(stream)
     socket = build_socket(session: session)
 
     socket.rack_response
     session.deliver_stream
+    wait_until { socket.alive? }
 
     assert socket.transmit("message")
     assert_equal [["message".bytesize].pack("N") + "message"], stream.writes
   end
 
+  def test_handshake_credential_is_in_env_before_on_open
+    # on_open is what runs the connection's #connect. Browsers send no cookies on a WebTransport
+    # CONNECT, so the credential has to be in place by then or every connection is anonymous.
+    stream = Stream.new(handshake("signed-credential"), open: true)
+    session = Session.new(stream)
+    env = { "quicsilver.context" => Context.new(webtransport: session) }
+    credential_at_open = :not_opened
+    target = EventTarget.new
+    target.define_singleton_method(:on_open) { credential_at_open = env[Quicsilver::ActionCable::CREDENTIAL_ENV_KEY] }
+
+    socket = ::ActionCable::Server::Socket::WebTransport.new(env, target)
+    socket.rack_response
+    session.deliver_stream
+    wait_until { credential_at_open != :not_opened }
+
+    assert_equal "signed-credential", credential_at_open
+  end
+
+  def test_handshake_is_not_delivered_as_a_cable_message
+    stream = Stream.new(handshake("signed-credential"), '{"command":"subscribe"}')
+    session = Session.new(stream)
+    target = EventTarget.new
+    socket = build_socket(session: session, target: target)
+
+    socket.rack_response
+    session.deliver_stream
+    wait_until { target.closed }
+
+    assert_equal ['{"command":"subscribe"}'], target.messages
+  end
+
+  def test_a_client_without_a_handshake_still_gets_its_first_message_delivered
+    # An older client opens straight into Action Cable traffic. Treating that first command as a
+    # handshake would drop it, and the subscription would silently never happen.
+    stream = Stream.new('{"command":"subscribe"}', "not json")
+    session = Session.new(stream)
+    target = EventTarget.new
+    socket = build_socket(session: session, target: target)
+
+    socket.rack_response
+    session.deliver_stream
+    wait_until { target.closed }
+
+    assert target.opened
+    assert_equal ['{"command":"subscribe"}', "not json"], target.messages
+  end
+
+  def test_credential_reads_nil_when_absent_or_blank
+    request = Struct.new(:env).new({})
+    assert_nil Quicsilver::ActionCable.credential(request)
+
+    request.env[Quicsilver::ActionCable::CREDENTIAL_ENV_KEY] = ""
+    assert_nil Quicsilver::ActionCable.credential(request)
+  end
+
   private
+
+  def handshake(credential = nil)
+    JSON.generate(quicsilver_handshake: { credential: credential })
+  end
 
   def build_socket(session: Session.new(Stream.new), target: EventTarget.new)
     env = { "quicsilver.context" => Context.new(webtransport: session) }

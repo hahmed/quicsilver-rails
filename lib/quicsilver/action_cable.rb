@@ -11,6 +11,22 @@ require "action_cable/server/socket/web_transport"
 
 module Quicsilver
   module ActionCable
+    # Where the WebTransport socket puts the credential from the client's
+    # handshake frame. Read it through .credential rather than by key.
+    CREDENTIAL_ENV_KEY = "quicsilver.cable.credential"
+
+    # The credential the client sent when it opened a WebTransport cable, or
+    # nil over a TCP WebSocket. Call from ApplicationCable::Connection#connect,
+    # alongside whatever cookie lookup the app already does:
+    #
+    #   def find_session
+    #     Session.find_signed(cookies.signed[:session_token]) ||
+    #       Session.find_signed(Quicsilver::ActionCable.credential(request), purpose: :cable)
+    #   end
+    def self.credential(request)
+      request.env[CREDENTIAL_ENV_KEY].presence
+    end
+
     module SocketSelection
       def initialize(server, env, coder: ActiveSupport::JSON)
         super

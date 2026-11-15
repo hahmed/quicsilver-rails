@@ -75,7 +75,7 @@ class FakeWebTransport {
 
 globalThis.WebTransport = FakeWebTransport
 
-const { WebTransportSocket, httpUrl, supported, installWebTransportCable } =
+const { WebTransportSocket, httpUrl, supported, installWebTransportCable, handshake } =
   await import("../../app/javascript/quicsilver/action_cable.js")
 
 function encodeFrame(message) {
@@ -135,7 +135,8 @@ test("frames outbound messages the way FramedStream reads them", async () => {
   socket.send(JSON.stringify({ command: "subscribe" }))
   await settle()
 
-  const [frame] = FakeWebTransport.lastInstance.written
+  // written[0] is the handshake; the first Action Cable message follows it.
+  const frame = FakeWebTransport.lastInstance.written[1]
   const length = new DataView(frame.buffer, frame.byteOffset, frame.byteLength).getUint32(0)
   assert.equal(length, frame.length - 4)
   assert.equal(new TextDecoder().decode(frame.slice(4)), '{"command":"subscribe"}')
@@ -289,4 +290,52 @@ test("installWebTransportCable leaves WebSockets alone where WebTransport is mis
   } finally {
     globalThis.WebTransport = transport
   }
+})
+
+function decodeFrame(frame) {
+  return new TextDecoder().decode(frame.slice(4))
+}
+
+test("sends a handshake frame before any Action Cable traffic", async () => {
+  // Browsers send no cookies on a WebTransport CONNECT. The handshake is how the credential
+  // reaches the server, and it must be first so the server never mistakes a command for it.
+  const socket = new WebTransportSocket("wss://example.com/cable")
+  await settle()
+  socket.send('{"command":"subscribe"}')
+  await settle()
+
+  const [first, second] = FakeWebTransport.lastInstance.written
+  assert.deepEqual(JSON.parse(decodeFrame(first)), { quicsilver_handshake: { credential: null } })
+  assert.equal(decodeFrame(second), '{"command":"subscribe"}')
+})
+
+test("the handshake carries the credential the page rendered", async () => {
+  const original = globalThis.document
+  globalThis.document = {
+    querySelector: selector =>
+      selector === 'meta[name="quicsilver-cable-credential"]' ? { content: "signed-credential" } : null,
+  }
+
+  try {
+    assert.deepEqual(handshake(), { quicsilver_handshake: { credential: "signed-credential" } })
+
+    new WebTransportSocket("wss://example.com/cable")
+    await settle()
+
+    const [first] = FakeWebTransport.lastInstance.written
+    assert.equal(JSON.parse(decodeFrame(first)).quicsilver_handshake.credential, "signed-credential")
+  } finally {
+    globalThis.document = original
+  }
+})
+
+test("onopen fires only after the handshake is written", async () => {
+  // The server runs #connect when it reads the handshake. Reporting open earlier would let Action
+  // Cable send commands that land before the server has authenticated anyone.
+  const socket = new WebTransportSocket("wss://example.com/cable")
+  let writtenAtOpen = null
+  socket.onopen = () => { writtenAtOpen = FakeWebTransport.lastInstance.written.length }
+  await settle()
+
+  assert.equal(writtenAtOpen, 1)
 })
