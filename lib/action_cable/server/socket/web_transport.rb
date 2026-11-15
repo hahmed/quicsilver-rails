@@ -150,13 +150,26 @@ module ActionCable
           payload = JSON.parse(first)
 
           if payload.is_a?(Hash) && payload.key?(HANDSHAKE_KEY)
-            @env[Quicsilver::ActionCable::CREDENTIAL_ENV_KEY] = payload[HANDSHAKE_KEY]["credential"]
+            store_credential(payload[HANDSHAKE_KEY]["credential"])
             nil
           else
             first
           end
         rescue JSON::ParserError
           first
+        end
+
+        # Written to the request the connection reads, not only to env. Under
+        # Rails, Socket#request is Rails.application.env_config.merge(env) — a
+        # copy — and the tagged logger memoizes it when "Started CONNECT" is
+        # logged, long before the handshake arrives. A credential written to
+        # env alone is invisible to #connect, and every cable is rejected.
+        def store_credential(credential)
+          @env[Quicsilver::ActionCable::CREDENTIAL_ENV_KEY] = credential
+
+          if event_target.respond_to?(:request)
+            event_target.request.env[Quicsilver::ActionCable::CREDENTIAL_ENV_KEY] = credential
+          end
         end
       end
     end

@@ -163,6 +163,27 @@ class ActionCableWebTransportSocketTest < Minitest::Test
     assert_equal "signed-credential", credential_at_open
   end
 
+  def test_handshake_credential_reaches_a_request_memoized_from_a_copy_of_env
+    # Under Rails, Socket#request is built from env_config.merge(env) — a copy — and memoized by
+    # the tagged logger when the CONNECT is logged, before the handshake arrives. Writing to env
+    # alone passed every test here and rejected every cable in a real app.
+    stream = Stream.new(handshake("signed-credential"), open: true)
+    session = Session.new(stream)
+    env = { "quicsilver.context" => Context.new(webtransport: session) }
+    memoized = Struct.new(:env).new(env.merge("action_dispatch.copied" => true))
+    credential_at_open = :not_opened
+    target = EventTarget.new
+    target.define_singleton_method(:request) { memoized }
+    target.define_singleton_method(:on_open) { credential_at_open = Quicsilver::ActionCable.credential(memoized) }
+
+    socket = ::ActionCable::Server::Socket::WebTransport.new(env, target)
+    socket.rack_response
+    session.deliver_stream
+    wait_until { credential_at_open != :not_opened }
+
+    assert_equal "signed-credential", credential_at_open
+  end
+
   def test_handshake_is_not_delivered_as_a_cable_message
     stream = Stream.new(handshake("signed-credential"), '{"command":"subscribe"}')
     session = Session.new(stream)
