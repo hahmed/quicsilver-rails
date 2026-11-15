@@ -138,3 +138,29 @@ export function installWebTransportCable({ ActionCable, force = false } = {}) {
   ActionCable.adapters.WebSocket = WebTransportSocket
   return true
 }
+
+// Install the socket globally, for bundles that capture their transport at module-eval time.
+//
+// Turbo inlines its own copy of Action Cable, and that copy reads the adapter once when it is
+// evaluated: `WebSocket: typeof WebSocket !== "undefined" ? WebSocket : undefined`. Evaluating Turbo
+// also defines turbo-cable-stream-source, which synchronously upgrades the elements already in the
+// parsed DOM and opens a consumer — so by the time any later module can call setConsumer, the
+// WebSocket is already connected and subscribed. Patching the module's adapters afterwards is too
+// late, and importing Turbo to reach it is what makes it too late.
+//
+// Swapping the global first lets Turbo's copy capture this class as its own adapter. The native
+// class is restored immediately: Turbo has already taken its reference, and nothing else should
+// inherit a WebTransport socket by surprise.
+//
+// Import this BEFORE "@hotwired/turbo-rails", and before anything else that reaches Turbo:
+//
+//   import "quicsilver/cable_boot"
+//   import "@hotwired/turbo-rails"
+export function captureGlobalWebSocket() {
+  if (!supported()) return false
+
+  const native = globalThis.WebSocket
+  globalThis.WebSocket = WebTransportSocket
+
+  return () => { globalThis.WebSocket = native }
+}
