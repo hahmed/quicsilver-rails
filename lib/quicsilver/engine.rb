@@ -31,6 +31,12 @@ module Quicsilver
       app.middleware.insert_before 0, Quicsilver::Middleware::AltSvc, **options
     end
 
+    initializer "quicsilver.request_protocol" do
+      ActiveSupport.on_load(:action_dispatch_request) do
+        include Quicsilver::Rails::RequestProtocol
+      end
+    end
+
     initializer "quicsilver.web_transport_certificate_helper" do
       ActiveSupport.on_load(:action_view) do
         include Quicsilver::Rails::WebTransportCertificateHelper

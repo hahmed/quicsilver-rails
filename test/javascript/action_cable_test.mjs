@@ -75,7 +75,7 @@ class FakeWebTransport {
 
 globalThis.WebTransport = FakeWebTransport
 
-const { WebTransportSocket, httpUrl, supported, installWebTransportCable, handshake } =
+const { WebTransportSocket, httpUrl, supported, installWebTransportCable, handshake, resetTransportFallback } =
   await import("../../app/javascript/quicsilver/action_cable.js")
 
 function encodeFrame(message) {
@@ -265,6 +265,7 @@ test("a transport that fails reports an unclean close so the monitor reconnects"
     assert.equal(closes[0].wasClean, false)
   } finally {
     globalThis.WebTransport = FakeWebTransport
+    resetTransportFallback()
   }
 })
 
@@ -338,4 +339,55 @@ test("onopen fires only after the handshake is written", async () => {
   await settle()
 
   assert.equal(writtenAtOpen, 1)
+})
+
+test("a session that never opens falls back to WebSocket for every later socket", async () => {
+  class FakeWebSocket {
+    constructor(url, protocols) { this.url = url; this.protocols = protocols }
+  }
+  resetTransportFallback({ WebSocket: FakeWebSocket })
+
+  const warn = console.warn
+  const warnings = []
+  console.warn = (...args) => warnings.push(args)
+  globalThis.WebTransport = class {
+    constructor() {
+      this.ready = Promise.reject(new Error("connection refused"))
+      this.closed = new Promise(() => {})
+    }
+  }
+
+  try {
+    const failing = new WebTransportSocket("wss://example.com/cable")
+    const closes = []
+    failing.onclose = event => closes.push(event)
+    await settle()
+    await settle()
+    assert.equal(closes[0].code, 1006)
+
+    const next = new WebTransportSocket("wss://example.com/cable", ["actioncable-v1-json"])
+    assert.ok(next instanceof FakeWebSocket)
+    assert.equal(next.url, "wss://example.com/cable")
+    assert.equal(warnings.length, 1)
+  } finally {
+    console.warn = warn
+    globalThis.WebTransport = FakeWebTransport
+    resetTransportFallback()
+  }
+})
+
+test("a session that opened and then dropped reconnects over WebTransport", async () => {
+  resetTransportFallback({ WebSocket: class {} })
+
+  try {
+    const socket = new WebTransportSocket("wss://example.com/cable")
+    await settle()
+    assert.equal(socket.readyState, WebTransportSocket.OPEN)
+    FakeWebTransport.lastInstance.rejectClosed(new Error("idle timeout"))
+    await settle()
+
+    assert.ok(new WebTransportSocket("wss://example.com/cable") instanceof WebTransportSocket)
+  } finally {
+    resetTransportFallback()
+  }
 })

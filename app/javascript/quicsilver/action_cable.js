@@ -10,6 +10,27 @@
 
 import { connect, readFrames, writeFrame } from "quicsilver/web_transport"
 
+// Captured before cable_boot swaps the global, so the fallback always reaches the real class.
+let NativeWebSocket = globalThis.WebSocket
+
+// Set when a WebTransport session fails to open. The page asked for HTTP/3, but this client cannot
+// reach the listener right now (UDP blocked, listener down), and the browser has already moved its
+// own requests to TCP. The cable follows it: every later socket on this page is a WebSocket.
+let webTransportUnavailable = false
+
+function fallBackToWebSocket(error) {
+  if (webTransportUnavailable) return
+
+  webTransportUnavailable = true
+  console.warn("[quicsilver] WebTransport failed to open; the cable is reconnecting over WebSocket.", error)
+}
+
+// Tests only: forget a previous fallback and choose the class it falls back to.
+export function resetTransportFallback({ WebSocket = globalThis.WebSocket } = {}) {
+  NativeWebSocket = WebSocket
+  webTransportUnavailable = false
+}
+
 // Connection#getState reads these off the constructor with `for (let state in adapters.WebSocket)`,
 // so they must be enumerable own properties, and the names must lowercase to the states it checks
 // ("open", "connecting"). Static class fields satisfy both.
@@ -20,6 +41,10 @@ export class WebTransportSocket {
   static CLOSED = 3
 
   constructor(url, protocols = []) {
+    // Returning another object from a constructor replaces the instance, so Action Cable holds a
+    // real WebSocket without knowing it asked for this class.
+    if (webTransportUnavailable && NativeWebSocket) return new NativeWebSocket(url, protocols)
+
     this.url = url
     this.readyState = WebTransportSocket.CONNECTING
 
@@ -64,6 +89,7 @@ export class WebTransportSocket {
 
   #transport = null
   #writer = null
+  #opened = false
 
   async #open() {
     try {
@@ -82,6 +108,7 @@ export class WebTransportSocket {
       await writeFrame(this.#writer, JSON.stringify(handshake()))
 
       this.readyState = WebTransportSocket.OPEN
+      this.#opened = true
       this.onopen?.({ target: this })
 
       await this.#receive(stream.readable.getReader())
@@ -102,6 +129,11 @@ export class WebTransportSocket {
   }
 
   #fail(error) {
+    // Only a session that never opened says WebTransport is unreachable. One that opened and then
+    // dropped is an ordinary disconnect, and reconnects over WebTransport.
+    // A socket the page closed while it was opening is not evidence either.
+    if (!this.#opened && this.readyState === WebTransportSocket.CONNECTING) fallBackToWebSocket(error)
+
     this.onerror?.({ error, target: this })
     this.#closed(1006, String(error?.message || error))
   }
