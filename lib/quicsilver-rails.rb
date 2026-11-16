@@ -11,5 +11,6 @@ require "quicsilver/rails/web_transport_certificate_helper"
 require "quicsilver/rails/cable_credential_helper"
 require "quicsilver/rails/server"
 require "quicsilver/rails/request_protocol"
+require "quicsilver/rails/transport_logger"
 require "quicsilver/action_cable"
 require "quicsilver/engine" if defined?(::Rails::Railtie)

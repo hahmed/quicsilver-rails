@@ -2,6 +2,7 @@
 
 require "quicsilver"
 require "quicsilver/rails/dev_web_transport_certificate"
+require "quicsilver/rails/transport_logger"
 
 module Quicsilver
   module Rails
@@ -23,6 +24,7 @@ module Quicsilver
                 address: ENV.fetch("QUICSILVER_HOST", "0.0.0.0"), certificate: DevWebTransportCertificate.fetch,
                 **transport_options)
         log_to_stdout if ::Rails.env.development?
+        log_transport_to_rails
 
         configuration = Quicsilver::Transport::Configuration.new \
           certificate.cert_file, certificate.key_file,
@@ -37,8 +39,7 @@ module Quicsilver
 
       # `rails server` is what normally tees the log to the terminal, and this process doesn't go
       # through it. $stdout is synced because foreman reads it through a pipe, which otherwise
-      # buffers the whole session. QUICSILVER_DEBUG=1 turns on the transport's own log:
-      # handshakes, WebTransport sessions, stream resets.
+      # buffers the whole session.
       def log_to_stdout
         $stdout.sync = true
 
@@ -46,8 +47,14 @@ module Quicsilver
           stdout = ActiveSupport::Logger.new($stdout).tap { |logger| logger.formatter = ::Rails.logger.formatter }
           ::Rails.logger.broadcast_to(stdout)
         end
+      end
 
-        Quicsilver.logger.level = ENV["QUICSILVER_DEBUG"].present? ? Logger::DEBUG : Logger::INFO
+      # Without this the transport writes to its own $stdout logger: absent from log/<env>.log, in a
+      # different format, and impossible to line up with the request it belongs to.
+      # QUICSILVER_DEBUG=1 turns on the transport's detail.
+      def log_transport_to_rails
+        level = ENV["QUICSILVER_DEBUG"].present? ? Logger::DEBUG : Logger::INFO
+        Quicsilver.logger = TransportLogger.new(::Rails.logger, level: level)
       end
     end
   end
