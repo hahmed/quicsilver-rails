@@ -33,7 +33,7 @@ module Quicsilver
 
         server = Quicsilver::Server.new Integer(port), address: address, app: app, server_configuration: configuration
 
-        ::Rails.logger.info "Quicsilver listening on UDP #{address}:#{port}"
+        Quicsilver.logger.info "listening on UDP #{address}:#{port}"
         server.start
       end
 
