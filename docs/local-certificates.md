@@ -79,42 +79,22 @@ Create a small `bin/quicsilver` for the UDP HTTP/3 listener:
 
 ```ruby
 #!/usr/bin/env ruby
-# frozen_string_literal: true
-
 ENV["RAILS_ENV"] ||= "development"
 
 require_relative "../config/environment"
-require "quicsilver"
-require "quicsilver/rails/dev_web_transport_certificate"
 
-host = ENV.fetch("QUICSILVER_HOST", "0.0.0.0")
-port = Integer(ENV.fetch("QUICSILVER_PORT", "3443"))
-certificate = Quicsilver::Rails::DevWebTransportCertificate.fetch
-
-configuration = Quicsilver::Transport::Configuration.new(
-  certificate.cert_file,
-  certificate.key_file,
-  idle_timeout_ms: 120_000,
-  keep_alive_interval_ms: 20_000,
-  max_unidirectional_streams: 100
-)
-
-server = Quicsilver::Server.new(
-  port,
-  address: host,
-  app: Rails.application,
-  server_configuration: configuration
-)
-
-server.start
+Quicsilver::Rails::Server.start
 ```
+
+`Server.start` calls `DevWebTransportCertificate.fetch` itself, so Quicsilver serves the same files
+Puma does.
 
 Then run both processes:
 
 ```procfile
 # Procfile.dev
 web: bin/rails server -b 'ssl://127.0.0.1:3443?key=tmp/quicsilver/webtransport/localhost-key.pem&cert=tmp/quicsilver/webtransport/localhost.pem'
-h3: bin/quicsilver
+h3: QUICSILVER_SHUTDOWN_TIMEOUT=3 bin/quicsilver
 ```
 
 TCP and UDP can use the same numeric port:
