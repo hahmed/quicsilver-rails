@@ -132,11 +132,22 @@ module ActionCable
               event_target.on_message(message)
             end
           rescue => error
-            event_target.on_error(error.message) if event_target.respond_to?(:on_error)
+            unless session_ended?(error)
+              event_target.on_error(error.message) if event_target.respond_to?(:on_error)
+            end
           ensure
             @open = false
             event_target.on_close("", 1000)
           end
+        end
+
+        # WT_SESSION_GONE is how a stream learns its session closed: the spec resets every stream of
+        # a session that ends, including when the server closes it on shutdown. That is the cable
+        # closing, not failing, so it reaches #on_close without an error.
+        def session_ended?(error)
+          defined?(Quicsilver::Server::WebTransportStream::ResetError) &&
+            error.is_a?(Quicsilver::Server::WebTransportStream::ResetError) &&
+            error.http_error_code == Quicsilver::Protocol::WebTransport::SESSION_GONE
         end
 
         # Reads the client's first frame. The handshake is required: the server

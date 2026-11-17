@@ -61,7 +61,8 @@ class ActionCableWebTransportSocketTest < Minitest::Test
   class Stream
     attr_reader :writes, :closed
 
-    def initialize(*reads, open: false)
+    def initialize(*reads, open: false, reset_with: nil)
+      @reset_with = reset_with
       @reads = Queue.new
       reads.each { |read| @reads << frame(read) }
       @reads.close unless open
@@ -70,7 +71,10 @@ class ActionCableWebTransportSocketTest < Minitest::Test
     end
 
     def read
-      @reads.pop
+      message = @reads.pop
+      raise Quicsilver::Server::WebTransportStream::ResetError.new(@reset_with) if message.nil? && @reset_with
+
+      message
     end
 
     def write(message)
@@ -113,6 +117,33 @@ class ActionCableWebTransportSocketTest < Minitest::Test
     assert target.opened
     assert_equal ["hello"], target.messages
     assert target.closed
+  end
+
+  def test_a_stream_reset_because_the_session_ended_closes_without_an_error
+    gone = Quicsilver::Protocol::WebTransport::SESSION_GONE
+    session = Session.new(Stream.new("hello", reset_with: gone))
+    target = EventTarget.new
+    build_socket(session: session, target: target).rack_response
+
+    session.deliver_stream
+    sleep 0.01
+
+    assert_equal ["hello"], target.messages
+    assert target.closed
+    assert_empty target.errors
+  end
+
+  def test_any_other_stream_reset_is_reported_as_an_error
+    session = Session.new(Stream.new("hello", reset_with: 0x52e4a40fa8db))
+    target = EventTarget.new
+    build_socket(session: session, target: target).rack_response
+
+    session.deliver_stream
+    sleep 0.01
+
+    assert target.closed
+    assert_equal 1, target.errors.size
+    assert_match(/WebTransport stream reset/, target.errors.first)
   end
 
   def test_a_second_stream_on_the_session_is_closed_not_left_hanging

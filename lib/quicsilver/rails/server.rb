@@ -22,7 +22,7 @@ module Quicsilver
 
       def start(app: ::Rails.application, port: ENV.fetch("QUICSILVER_PORT", DEFAULT_PORT),
                 address: ENV.fetch("QUICSILVER_HOST", "0.0.0.0"), certificate: DevWebTransportCertificate.fetch,
-                **transport_options)
+                shutdown_timeout: shutdown_timeout_from_env, **transport_options)
         log_to_stdout if ::Rails.env.development?
         log_transport_to_rails
 
@@ -32,9 +32,17 @@ module Quicsilver
           **transport_options
 
         server = Quicsilver::Server.new Integer(port), address: address, app: app, server_configuration: configuration
+        server.shutdown_timeout = shutdown_timeout if shutdown_timeout && server.respond_to?(:shutdown_timeout=)
 
         Quicsilver.logger.info "listening on UDP #{address}:#{port}"
         server.start
+      end
+
+      # QUICSILVER_SHUTDOWN_TIMEOUT, in seconds: how long a graceful shutdown on INT or TERM may
+      # take. Quicsilver's default is 30s; under foreman, which kills after 5s, it must be shorter.
+      def shutdown_timeout_from_env
+        value = ENV["QUICSILVER_SHUTDOWN_TIMEOUT"]
+        Float(value) if value.present?
       end
 
       # `rails server` is what normally tees the log to the terminal, and this process doesn't go
