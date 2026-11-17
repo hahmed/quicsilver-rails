@@ -9,7 +9,7 @@ begin
 rescue LoadError
 end
 
-require "quicsilver/web_transport/framed_stream"
+require "quicsilver/action_cable/cookie_bridge"
 
 module Quicsilver
   module ActionCable
@@ -56,6 +56,16 @@ module Quicsilver
     # an app on Rails 8.1 never moves its cable onto a transport the server can't accept.
     def available?
       SEAM_AVAILABLE
+    end
+
+    # Shared by the page helper, which issues the token, and the socket, which reads it. Built from
+    # the Rails app on first use; nil outside one, where there is no secret to encrypt with.
+    def cookie_bridge
+      @cookie_bridge ||= CookieBridge.from_rails
+    end
+
+    def cookie_bridge=(bridge)
+      @cookie_bridge = bridge
     end
 
     # Installs the adapter, or warns once and does nothing where Rails has no socket seam. Either

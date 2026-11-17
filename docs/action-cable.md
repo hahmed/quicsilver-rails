@@ -18,7 +18,8 @@ Server-to-server clients are a different story, and may prefer Extended CONNECT.
 
 ## Setup
 
-Three pieces in the app. The importmap pins for `quicsilver/*` come from the engine.
+Three pieces in the app, none of them in the connection. The importmap pins for `quicsilver/*` come
+from the engine.
 
 ### 1. Boot the transport before Turbo
 
@@ -43,7 +44,7 @@ One call in the layout's `<head>`:
 
 ```erb
 <%# layout <head> %>
-<%= quicsilver_meta_tags cable_credential: Current.session&.signed_id(purpose: :cable, expires_in: 1.day) %>
+<%= quicsilver_meta_tags %>
 ```
 
 On a page served over HTTP/3 it renders:
@@ -52,33 +53,61 @@ On a page served over HTTP/3 it renders:
   [`local-certificates.md`](local-certificates.md));
 - the `quicsilver-cable` marker, which tells `cable_boot` to move the cable, when this Rails can carry
   it (`Quicsilver::ActionCable.available?`);
-- the cable credential, when one is given.
+- the cable's cookies, encrypted (see [Authentication](#authentication));
+- a separate cable credential, if you pass `cable_credential:`.
 
 On a page served over TCP it renders nothing. The parts are also available on their own as
-`quicsilver_webtransport_certificate_meta_tag` and `quicsilver_cable_credential_meta_tag(credential)`.
+`quicsilver_webtransport_certificate_meta_tag`, `quicsilver_cable_meta_tag`,
+`quicsilver_cable_cookies_meta_tag` and `quicsilver_cable_credential_meta_tag(credential)`.
 
-### 3. Authenticate without cookies
-
-Browsers send no cookies on a WebTransport CONNECT, so the cable can't find the session the usual way.
-The page renders a credential instead, and the socket sends it in its first frame:
-
-```json
-{"quicsilver_handshake":{"credential":"…"}}
-```
-
-The connection reads it through `quicsilver_cable_credential`:
+### 3. Name the cookies the connection reads
 
 ```ruby
-# app/channels/application_cable/connection.rb
-def find_session
-  Session.find_signed(cookies.signed[:session_token]) ||
-    Session.find_signed(quicsilver_cable_credential, purpose: :cable)
-end
+# config/application.rb
+config.quicsilver.cable_cookies = %i[session_token]
 ```
 
-Keep the credential short-lived and purpose-scoped, so a leaked one can't stand in for the session
-cookie. It travels in a frame, not the URL, so it stays out of access logs. A WebSocket cable sends
-cookies as usual, and `quicsilver_cable_credential` is `nil` there.
+## Authentication
+
+Browsers send no cookies on a WebTransport CONNECT (the W3C spec fetches it with credentials mode
+`omit`), so an unchanged `ApplicationCable::Connection` would find nobody. The page that opens the
+cable did arrive with cookies, so the gem gives them back:
+
+1. `quicsilver_meta_tags` encrypts the cookies named in `config.quicsilver.cable_cookies` into a
+   token, with a key derived from `secret_key_base`, and renders it.
+2. The socket sends the token in its first frame, not the URL, so it stays out of access logs:
+   `{"quicsilver_handshake":{"cookies":"…","credential":null}}`.
+3. The adapter decrypts it and restores the request's `Cookie` header before `connect` runs. It drops
+   any cookie jar memoized earlier (a log tag that reads cookies builds one when the CONNECT is
+   logged), and never replaces cookies the request really carried.
+
+Your connection's existing `cookies` lookup then works over both transports.
+
+What to know:
+
+- **Only the listed cookies travel.** With none listed, no token renders and a WebTransport cable is
+  anonymous.
+- **The token expires after a day.** A reconnect after that waits for the next page load.
+- **It is a snapshot.** A cookie rotated after the page rendered arrives stale until the next load.
+- **Logout revokes the cable only as well as your lookup does.** A database-backed session stops
+  working when its row is deleted. A cookie-store session keeps working until the token expires, as a
+  copied cookie would.
+- Like any value in the page, a script running in it can read the token. It is only accepted on a
+  cable handshake.
+
+### A separate credential
+
+An app that wants the cable to authenticate differently from the page can pass a credential instead.
+It travels in the same handshake frame, and the connection reads it through
+`quicsilver_cable_credential`, which is `nil` over a WebSocket:
+
+```erb
+<%= quicsilver_meta_tags cable_credential: Current.session&.signed_id(purpose: :cable, expires_in: 1.day) %>
+```
+
+```ruby
+Session.find_signed(quicsilver_cable_credential, purpose: :cable)
+```
 
 ## Which transport
 

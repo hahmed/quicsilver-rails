@@ -161,7 +161,9 @@ module ActionCable
           payload = JSON.parse(first)
 
           if payload.is_a?(Hash) && payload.key?(HANDSHAKE_KEY)
-            store_credential(payload[HANDSHAKE_KEY]["credential"])
+            handshake = payload[HANDSHAKE_KEY]
+            store_cookies(handshake["cookies"])
+            store_credential(handshake["credential"])
             nil
           else
             first
@@ -176,11 +178,31 @@ module ActionCable
         # logged, long before the handshake arrives. A credential written to
         # env alone is invisible to #connect, and every cable is rejected.
         def store_credential(credential)
-          @env[Quicsilver::ActionCable::CREDENTIAL_ENV_KEY] = credential
+          request_envs.each { |env| env[Quicsilver::ActionCable::CREDENTIAL_ENV_KEY] = credential }
+        end
 
-          if event_target.respond_to?(:request)
-            event_target.request.env[Quicsilver::ActionCable::CREDENTIAL_ENV_KEY] = credential
+        # Restores the cookies the page sent, which WebTransport left off the CONNECT, so the app's
+        # own cookie lookup in #connect finds the session. Written where the credential goes, for the
+        # same reason, and the memoized cookie jar is dropped too: anything that read cookies before
+        # the handshake arrived, such as a log tag, built an empty jar that would otherwise stick.
+        #
+        # Never replaces cookies the request really carried.
+        def store_cookies(token)
+          header = Quicsilver::ActionCable.cookie_bridge&.read(token)
+          return unless header
+
+          request_envs.each do |env|
+            next if env["HTTP_COOKIE"].present?
+
+            env["HTTP_COOKIE"] = header
+            env.delete("action_dispatch.cookies")
           end
+        end
+
+        def request_envs
+          envs = [ @env ]
+          envs << event_target.request.env if event_target.respond_to?(:request)
+          envs.uniq(&:object_id)
         end
       end
     end

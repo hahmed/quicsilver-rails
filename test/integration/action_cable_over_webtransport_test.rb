@@ -15,13 +15,13 @@ require "socket"
 # WebTransport CONNECT to /cable, one bidirectional stream, a handshake frame,
 # then length-prefixed Action Cable JSON on it.
 class ActionCableOverWebTransportTest < Minitest::Test
-  # Identifies by the handshake credential, the way an app's
-  # ApplicationCable::Connection would when cookies are unavailable.
+  # Identifies by cookie, the way an app's ApplicationCable::Connection does over a WebSocket, or by
+  # the separate handshake credential.
   class Connection < ActionCable::Connection::Base
     identified_by :credential
 
     def connect
-      self.credential = quicsilver_cable_credential || reject_unauthorized_connection
+      self.credential = cookies["session_token"] || quicsilver_cable_credential || reject_unauthorized_connection
     end
   end
 
@@ -32,6 +32,10 @@ class ActionCableOverWebTransportTest < Minitest::Test
 
     def shout(data)
       ActionCable.server.broadcast("echo", { "heard" => data["text"] })
+    end
+
+    def whoami(_data)
+      ActionCable.server.broadcast("echo", { "identity" => credential })
     end
   end
 
@@ -61,6 +65,7 @@ class ActionCableOverWebTransportTest < Minitest::Test
     @client&.disconnect
     @server&.stop
     @thread&.join(3)
+    Quicsilver::ActionCable.cookie_bridge = nil
   end
 
   def test_subscribe_and_broadcast_round_trip_over_a_bidi_stream
@@ -78,6 +83,25 @@ class ActionCableOverWebTransportTest < Minitest::Test
     message = @client.read_json_until { |m| m["message"] }
     assert_equal({ "heard" => "over quic" }, message["message"])
     assert_equal identifier, message["identifier"]
+  end
+
+  # The browser sends no cookies on the CONNECT. The page's cookies come back in the handshake, and the
+  # connection's ordinary cookie lookup authenticates the cable.
+  def test_the_connection_authenticates_with_the_pages_cookies
+    bridge = Quicsilver::ActionCable::CookieBridge.new(secret: "s" * 32, names: %w[session_token])
+    Quicsilver::ActionCable.cookie_bridge = bridge
+
+    @client = CableClient.new(@port)
+    @client.connect_cable("/cable", cookies: bridge.token_for("session_token" => "signed-session"))
+
+    assert_equal "welcome", @client.read_json["type"]
+
+    identifier = { channel: EchoChannel.name }.to_json
+    @client.send_json(command: "subscribe", identifier: identifier)
+    @client.read_json_until { |m| m["type"] == "confirm_subscription" }
+    @client.send_json(command: "message", identifier: identifier, data: { action: "whoami" }.to_json)
+
+    assert_equal({ "identity" => "signed-session" }, @client.read_json_until { |m| m["message"] }["message"])
   end
 
   def test_a_cable_without_a_credential_is_rejected_by_the_connection
@@ -132,7 +156,7 @@ class ActionCableOverWebTransportTest < Minitest::Test
       super
     end
 
-    def connect_cable(path, credential: nil)
+    def connect_cable(path, credential: nil, cookies: nil)
       get("/") # settle the connection and SETTINGS
       connect = open_stream
       headers = Quicsilver::Protocol.build_headers_frame([
@@ -152,7 +176,7 @@ class ActionCableOverWebTransportTest < Minitest::Test
       # What action_cable.js writes first. The server waits for it before
       # running #connect, so a client that waited for welcome instead would
       # never get one.
-      send_json(quicsilver_handshake: { credential: credential })
+      send_json(quicsilver_handshake: { cookies: cookies, credential: credential })
     end
 
     def send_json(hash)

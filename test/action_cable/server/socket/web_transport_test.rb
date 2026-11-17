@@ -215,6 +215,35 @@ class ActionCableWebTransportSocketTest < Minitest::Test
     assert_equal "signed-credential", credential_at_open
   end
 
+  # Browsers send no cookies on a WebTransport CONNECT. The page's cookies come back in the handshake,
+  # and #connect has to see them through the request's cookie jar. A log tag that reads cookies when
+  # the CONNECT is logged builds that jar before the handshake arrives, so it must not stick.
+  def test_handshake_cookies_reach_a_cookie_jar_built_before_the_handshake
+    with_cookie_bridge do |bridge|
+      seen = cookie_seen_at_open(handshake(cookies: bridge.token_for("session_token" => "signed-session")),
+        build_jar_early: true)
+
+      assert_equal "signed-session", seen
+    end
+  end
+
+  def test_handshake_cookies_never_replace_cookies_the_request_carried
+    with_cookie_bridge do |bridge|
+      seen = cookie_seen_at_open(handshake(cookies: bridge.token_for("session_token" => "from-the-page")),
+        env: { "HTTP_COOKIE" => "session_token=on-the-request" })
+
+      assert_equal "on-the-request", seen
+    end
+  end
+
+  def test_a_forged_cookie_token_restores_nothing
+    with_cookie_bridge do
+      forged = Quicsilver::ActionCable::CookieBridge.new(secret: "o" * 32, names: %w[session_token])
+
+      assert_nil cookie_seen_at_open(handshake(cookies: forged.token_for("session_token" => "stolen")))
+    end
+  end
+
   def test_handshake_is_not_delivered_as_a_cable_message
     stream = Stream.new(handshake("signed-credential"), '{"command":"subscribe"}')
     session = Session.new(stream)
@@ -254,8 +283,35 @@ class ActionCableWebTransportSocketTest < Minitest::Test
 
   private
 
-  def handshake(credential = nil)
-    JSON.generate(quicsilver_handshake: { credential: credential })
+  def handshake(credential = nil, cookies: nil)
+    JSON.generate(quicsilver_handshake: { cookies: cookies, credential: credential })
+  end
+
+  def with_cookie_bridge
+    previous = Quicsilver::ActionCable.cookie_bridge
+    bridge = Quicsilver::ActionCable::CookieBridge.new(secret: "s" * 32, names: %w[session_token])
+    Quicsilver::ActionCable.cookie_bridge = bridge
+    yield bridge
+  ensure
+    Quicsilver::ActionCable.cookie_bridge = previous
+  end
+
+  # The session_token cookie #connect would read, given a handshake frame. Mirrors Rails: the
+  # request #connect uses is a copy of env, memoized when the CONNECT is logged.
+  def cookie_seen_at_open(frame, env: {}, build_jar_early: false)
+    session = Session.new(Stream.new(frame, open: true))
+    env = env.merge("quicsilver.context" => Context.new(webtransport: session))
+    request = ActionDispatch::Request.new(env.dup)
+    request.cookie_jar if build_jar_early
+    seen = :not_opened
+    target = EventTarget.new
+    target.define_singleton_method(:request) { request }
+    target.define_singleton_method(:on_open) { seen = request.cookie_jar["session_token"] }
+
+    ::ActionCable::Server::Socket::WebTransport.new(env, target).rack_response
+    session.deliver_stream
+    wait_until { seen != :not_opened }
+    seen
   end
 
   def build_socket(session: Session.new(Stream.new), target: EventTarget.new)

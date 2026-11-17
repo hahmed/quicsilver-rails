@@ -107,22 +107,19 @@ import "quicsilver/cable_boot"
 import "@hotwired/turbo-rails"
 ```
 
-Browsers send no cookies on a WebTransport CONNECT, so the page hands the cable a short-lived credential:
+Render the tags in the layout, and name the cookies your connection authenticates with:
 
 ```erb
 <%# layout <head> %>
-<%= quicsilver_meta_tags cable_credential: Current.session&.signed_id(purpose: :cable, expires_in: 1.day) %>
+<%= quicsilver_meta_tags %>
 ```
-
-The connection accepts the credential when there's no cookie:
 
 ```ruby
-# app/channels/application_cable/connection.rb
-def find_session
-  Session.find_signed(cookies.signed[:session_token]) ||
-    Session.find_signed(quicsilver_cable_credential, purpose: :cable)
-end
+# config/application.rb
+config.quicsilver.cable_cookies = %i[session_token]
 ```
+
+Browsers send no cookies on a WebTransport CONNECT. The page carries those cookies, encrypted, and the cable restores them before `connect` runs, so `ApplicationCable::Connection` needs no change: its usual `cookies` lookup works over both transports. Only the listed cookies travel. Logging out revokes the cable if your sessions are database rows; a cookie-store session keeps working until the token expires (a day), as a copied cookie would. See [`docs/action-cable.md`](docs/action-cable.md#authentication).
 
 The importmap pins for `quicsilver/*` are added by the engine.
 

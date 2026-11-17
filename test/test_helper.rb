@@ -2,6 +2,9 @@
 
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
 require "quicsilver-rails"
+# A Rails app always loads the cookie middleware, which is what gives a request its #cookie_jar and
+# an Action Cable connection its #cookies. These tests run without an app.
+require "action_dispatch/middleware/cookies"
 
 require "minitest/autorun"
 

@@ -306,7 +306,7 @@ test("sends a handshake frame before any Action Cable traffic", async () => {
   await settle()
 
   const [first, second] = FakeWebTransport.lastInstance.written
-  assert.deepEqual(JSON.parse(decodeFrame(first)), { quicsilver_handshake: { credential: null } })
+  assert.deepEqual(JSON.parse(decodeFrame(first)), { quicsilver_handshake: { cookies: null, credential: null } })
   assert.equal(decodeFrame(second), '{"command":"subscribe"}')
 })
 
@@ -318,13 +318,27 @@ test("the handshake carries the credential the page rendered", async () => {
   }
 
   try {
-    assert.deepEqual(handshake(), { quicsilver_handshake: { credential: "signed-credential" } })
+    assert.deepEqual(handshake(), { quicsilver_handshake: { cookies: null, credential: "signed-credential" } })
 
     new WebTransportSocket("wss://example.com/cable")
     await settle()
 
     const [first] = FakeWebTransport.lastInstance.written
     assert.equal(JSON.parse(decodeFrame(first)).quicsilver_handshake.credential, "signed-credential")
+  } finally {
+    globalThis.document = original
+  }
+})
+
+test("the handshake carries the page's encrypted cookies, which WebTransport leaves off the CONNECT", () => {
+  const original = globalThis.document
+  globalThis.document = {
+    querySelector: selector =>
+      selector === 'meta[name="quicsilver-cable-cookies"]' ? { content: "encrypted-cookies" } : null,
+  }
+
+  try {
+    assert.deepEqual(handshake(), { quicsilver_handshake: { cookies: "encrypted-cookies", credential: null } })
   } finally {
     globalThis.document = original
   }
@@ -418,6 +432,11 @@ async function bootWith(metaNames) {
 
 test("cable_boot swaps the global for Turbo to capture, then restores it, when the page carries the cable marker", async () => {
   const { assigned, native } = await bootWith(["quicsilver-cable"])
+  assert.deepEqual(assigned, [WebTransportSocket, native])
+})
+
+test("cable_boot moves the cable for a page carrying only the cookies tag", async () => {
+  const { assigned, native } = await bootWith(["quicsilver-cable-cookies"])
   assert.deepEqual(assigned, [WebTransportSocket, native])
 })
 

@@ -150,10 +150,16 @@ export class WebTransportSocket {
   }
 }
 
-// The handshake frame. The key matches HANDSHAKE_KEY in the Ruby socket.
+// The handshake frame. The key matches HANDSHAKE_KEY in the Ruby socket. `cookies` is the encrypted
+// token quicsilver_meta_tags rendered, which the server turns back into the page's cookies;
+// `credential` is the optional separate credential.
 export function handshake() {
-  const meta = typeof document !== "undefined" && document.querySelector('meta[name="quicsilver-cable-credential"]')
-  return { quicsilver_handshake: { credential: meta ? meta.content : null } }
+  return { quicsilver_handshake: { cookies: metaContent("quicsilver-cable-cookies"), credential: metaContent("quicsilver-cable-credential") } }
+}
+
+function metaContent(name) {
+  const meta = typeof document !== "undefined" && document.querySelector(`meta[name="${name}"]`)
+  return meta ? meta.content : null
 }
 
 // Action Cable builds ws:// and wss:// URLs; WebTransport takes the https:// origin the HTTP/3

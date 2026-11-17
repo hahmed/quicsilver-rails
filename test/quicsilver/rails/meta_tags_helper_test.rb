@@ -14,9 +14,9 @@ class MetaTagsHelperTest < Minitest::Test
 
     attr_reader :request
 
-    def initialize(protocol)
+    def initialize(protocol, cookies: nil)
       ActionDispatch::Request.include(Quicsilver::Rails::RequestProtocol)
-      @request = ActionDispatch::Request.new("SERVER_PROTOCOL" => protocol)
+      @request = ActionDispatch::Request.new({ "SERVER_PROTOCOL" => protocol, "HTTP_COOKIE" => cookies }.compact)
     end
   end
 
@@ -45,6 +45,22 @@ class MetaTagsHelperTest < Minitest::Test
     assert_empty View.new("HTTP/1.1").quicsilver_meta_tags(cable_credential: "abc")
   end
 
+  def test_an_http3_page_carries_its_allowlisted_cookies_for_the_cable
+    with_cookie_bridge do |bridge|
+      html = View.new("HTTP/3", cookies: "session_token=signed; theme=dark").quicsilver_meta_tags
+      token = html[/name="quicsilver-cable-cookies" content="([^"]+)"/, 1]
+
+      assert_equal "session_token=signed", bridge.read(CGI.unescapeHTML(token))
+    end
+  end
+
+  def test_no_cookie_tag_without_an_allowlisted_cookie_or_over_tcp
+    with_cookie_bridge do
+      refute_includes View.new("HTTP/3", cookies: "theme=dark").quicsilver_meta_tags, "quicsilver-cable-cookies"
+      assert_empty View.new("HTTP/1.1", cookies: "session_token=signed").quicsilver_meta_tags
+    end
+  end
+
   def test_rails_without_the_socket_seam_gets_no_cable_tags
     Quicsilver::ActionCable.stub(:available?, false) do
       html = View.new("HTTP/3").quicsilver_meta_tags(cable_credential: "abc")
@@ -53,4 +69,14 @@ class MetaTagsHelperTest < Minitest::Test
       assert_includes html, "pinned-hash", "WebTransport endpoints still need the certificate on older Rails"
     end
   end
+
+  private
+    def with_cookie_bridge
+      previous = Quicsilver::ActionCable.cookie_bridge
+      bridge = Quicsilver::ActionCable::CookieBridge.new(secret: "s" * 32, names: %w[session_token])
+      Quicsilver::ActionCable.cookie_bridge = bridge
+      yield bridge
+    ensure
+      Quicsilver::ActionCable.cookie_bridge = previous
+    end
 end

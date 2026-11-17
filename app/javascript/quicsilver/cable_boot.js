@@ -10,11 +10,11 @@
 
 import { captureGlobalWebSocket } from "quicsilver/action_cable"
 
-// Rendered by quicsilver_meta_tags (the marker) or quicsilver_cable_credential_meta_tag, only on pages
-// served over HTTP/3 by a Rails that can carry the cable there. The certificate hash alone is not a
-// signal: it also serves WebTransport endpoints on Rails versions without the cable adapter.
+// Rendered by quicsilver_meta_tags, or the cable helpers on their own, only on pages served over HTTP/3
+// by a Rails that can carry the cable there. The certificate hash alone is not a signal: it also
+// serves WebTransport endpoints on Rails versions without the cable adapter.
 const cableOverWebTransport = document.querySelector(
-  'meta[name="quicsilver-cable"], meta[name="quicsilver-cable-credential"]'
+  'meta[name="quicsilver-cable"], meta[name="quicsilver-cable-cookies"], meta[name="quicsilver-cable-credential"]'
 )
 
 if (cableOverWebTransport) {
