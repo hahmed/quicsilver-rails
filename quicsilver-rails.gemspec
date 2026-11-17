@@ -11,6 +11,7 @@ Gem::Specification.new do |spec|
   spec.summary = "Rails integration experiments for Quicsilver HTTP/3 and WebTransport."
   spec.description = "Rails helpers, runners, and API experiments for using Quicsilver WebTransport from Rails applications."
   spec.homepage = "https://github.com/hahmed/quicsilver-rails"
+  spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2.0"
 
   spec.metadata["homepage_uri"] = spec.homepage
