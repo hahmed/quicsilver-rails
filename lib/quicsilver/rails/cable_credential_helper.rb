@@ -12,13 +12,14 @@ module Quicsilver
     #   <%= quicsilver_cable_credential_meta_tag Current.session&.signed_id(purpose: :cable, expires_in: 1.day) %>
     #
     # Renders nothing for a nil credential, so signed-out pages need no guard, and
-    # nothing unless this page arrived over HTTP/3. A page served over TCP gets a
-    # WebSocket cable, which authenticates with cookies and needs no credential.
+    # nothing unless this page arrived over HTTP/3 on a Rails that can carry the
+    # cable there. A page served over TCP gets a WebSocket cable, which
+    # authenticates with cookies and needs no credential.
     module CableCredentialHelper
       META_NAME = "quicsilver-cable-credential"
 
       def quicsilver_cable_credential_meta_tag(credential)
-        if credential.present? && request.http3?
+        if credential.present? && request.http3? && Quicsilver::ActionCable.available?
           tag.meta(name: META_NAME, content: credential)
         end
       end

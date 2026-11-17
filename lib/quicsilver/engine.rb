@@ -41,6 +41,7 @@ module Quicsilver
       ActiveSupport.on_load(:action_view) do
         include Quicsilver::Rails::WebTransportCertificateHelper
         include Quicsilver::Rails::CableCredentialHelper
+        include Quicsilver::Rails::MetaTagsHelper
       end
     end
 

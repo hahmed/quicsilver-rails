@@ -1,16 +1,19 @@
 # frozen_string_literal: true
 
+# The adapter plugs into ActionCable::Server::Socket, which only Rails main (8.2.0.alpha) has.
+# Rails 8.1 and earlier build connections on ActionCable::Connection::WebSocket instead, so there is
+# nothing to plug into. The socket file is only loaded where the seam exists: loading it elsewhere
+# would define an empty ActionCable::Server::Socket that nothing uses.
 begin
-  require "action_cable/connection/client_socket"
-rescue LoadError
   require "action_cable/server/socket"
+rescue LoadError
 end
 
 require "quicsilver/web_transport/framed_stream"
-require "action_cable/server/socket/web_transport"
 
 module Quicsilver
   module ActionCable
+    SEAM_AVAILABLE = defined?(::ActionCable::Server::Socket) ? true : false
     # Where the WebTransport socket puts the credential from the client's
     # handshake frame. Read it through .credential rather than by key.
     CREDENTIAL_ENV_KEY = "quicsilver.cable.credential"
@@ -49,12 +52,29 @@ module Quicsilver
 
     module_function
 
-    def install!
+    # Whether this Rails can carry Action Cable over WebTransport. The page helpers check it, so
+    # an app on Rails 8.1 never moves its cable onto a transport the server can't accept.
+    def available?
+      SEAM_AVAILABLE
+    end
+
+    # Installs the adapter, or warns once and does nothing where Rails has no socket seam. Either
+    # way connections get #quicsilver_cable_credential, which is nil without the adapter.
+    def install!(logger: (::Rails.logger if defined?(::Rails)) || Quicsilver.logger)
       return if @installed
 
-      ::ActionCable::Server::Socket.prepend(SocketSelection)
       ::ActionCable::Connection::Base.include(Connection)
+
+      if available?
+        ::ActionCable::Server::Socket.prepend(SocketSelection)
+      else
+        logger&.warn "quicsilver-rails: Action Cable over WebTransport needs Rails main (8.2.0.alpha); " \
+          "Action Cable #{::ActionCable.version} has no ActionCable::Server::Socket, so cables stay on WebSocket."
+      end
+
       @installed = true
     end
   end
 end
+
+require "action_cable/server/socket/web_transport" if Quicsilver::ActionCable.available?

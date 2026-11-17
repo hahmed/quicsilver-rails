@@ -391,3 +391,37 @@ test("a session that opened and then dropped reconnects over WebTransport", asyn
     resetTransportFallback()
   }
 })
+
+// cable_boot reads the page once, at import. A query string makes each import a fresh evaluation.
+// The swap is undone in a microtask, before `await import` returns, so record every assignment.
+async function bootWith(metaNames) {
+  const previous = globalThis.document
+  const native = globalThis.WebSocket
+  const assigned = []
+  let current = native
+  Object.defineProperty(globalThis, "WebSocket", {
+    configurable: true,
+    get: () => current,
+    set: value => { assigned.push(value); current = value },
+  })
+  globalThis.document = {
+    querySelector: selector => metaNames.some(name => selector.includes(`name="${name}"`)) ? {} : null,
+  }
+  try {
+    await import(`../../app/javascript/quicsilver/cable_boot.js?case=${metaNames.join("+") || "none"}`)
+  } finally {
+    globalThis.document = previous
+    Object.defineProperty(globalThis, "WebSocket", { configurable: true, writable: true, value: native })
+  }
+  return { assigned, native }
+}
+
+test("cable_boot swaps the global for Turbo to capture, then restores it, when the page carries the cable marker", async () => {
+  const { assigned, native } = await bootWith(["quicsilver-cable"])
+  assert.deepEqual(assigned, [WebTransportSocket, native])
+})
+
+test("cable_boot does nothing on a page without cable tags, even with the certificate hash", async () => {
+  const { assigned } = await bootWith(["quicsilver-webtransport-certificate-sha256"])
+  assert.deepEqual(assigned, [])
+})

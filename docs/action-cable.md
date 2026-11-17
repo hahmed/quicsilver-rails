@@ -4,7 +4,8 @@ Experimental. Moves Action Cable's transport from a TCP WebSocket onto an HTTP/3
 channels, subscriptions and the JSON protocol untouched. Turbo Streams ride along unchanged.
 
 **Requires Rails main (8.2.0.alpha).** The adapter plugs into `ActionCable::Server::Socket`, which
-Rails 8.1 and earlier don't have. On those versions it is inert and the cable stays on WebSocket.
+Rails 8.1 and earlier don't have. On those versions the cable stays on WebSocket: the cable tags
+don't render, and `install!` logs a warning at boot.
 
 ## Why WebTransport rather than WebSockets over HTTP/3
 
@@ -38,15 +39,23 @@ on pages that arrived over HTTP/3; see [Which transport](#which-transport).
 
 ### 2. Render the tags
 
+One call in the layout's `<head>`:
+
 ```erb
 <%# layout <head> %>
-<%= quicsilver_webtransport_certificate_meta_tag %>
-<%= quicsilver_cable_credential_meta_tag(Current.session&.signed_id(purpose: :cable, expires_in: 1.day)) %>
+<%= quicsilver_meta_tags cable_credential: Current.session&.signed_id(purpose: :cable, expires_in: 1.day) %>
 ```
 
-Both render only when the page arrived over HTTP/3. The certificate tag is development-only: it pins
-the local certificate's hash so the browser accepts a private CA. See
-[`local-certificates.md`](local-certificates.md).
+On a page served over HTTP/3 it renders:
+
+- the development certificate hash, so the browser accepts a local CA (development only; see
+  [`local-certificates.md`](local-certificates.md));
+- the `quicsilver-cable` marker, which tells `cable_boot` to move the cable, when this Rails can carry
+  it (`Quicsilver::ActionCable.available?`);
+- the cable credential, when one is given.
+
+On a page served over TCP it renders nothing. The parts are also available on their own as
+`quicsilver_webtransport_certificate_meta_tag` and `quicsilver_cable_credential_meta_tag(credential)`.
 
 ### 3. Authenticate without cookies
 
@@ -78,7 +87,8 @@ The cable follows the page, with no configuration:
 | Situation | Cable |
 |---|---|
 | Page arrived over HTTP/3 | WebTransport |
-| Page arrived over TCP (first visit, UDP blocked, plain `bin/dev`) | WebSocket. Neither tag renders, so `cable_boot` does nothing |
+| Page arrived over TCP (first visit, UDP blocked, plain `bin/dev`) | WebSocket. No cable tags render, so `cable_boot` does nothing |
+| Rails 8.1 or earlier | WebSocket. No cable tags render, and `install!` logs a warning |
 | WebTransport session fails to open | WebSocket for the rest of the page, with one console warning |
 | WebTransport session opened, then dropped | Reconnects over WebTransport |
 

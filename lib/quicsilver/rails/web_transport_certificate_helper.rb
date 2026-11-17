@@ -8,8 +8,8 @@ module Quicsilver
       META_NAME = "quicsilver-webtransport-certificate-sha256"
 
       def quicsilver_webtransport_certificate_meta_tag
-        # Development-only: the hash pins a local certificate. Only over HTTP/3, because its presence
-        # is what tells cable_boot to move the cable onto WebTransport.
+        # Development-only: the hash pins a local certificate. Only over HTTP/3, where WebTransport
+        # can be reached at all.
         return unless ::Rails.env.development? && request.http3?
 
         certificate = DevWebTransportCertificate.fetch
