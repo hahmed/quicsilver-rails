@@ -6,6 +6,10 @@ module Quicsilver
   module WebTransport
     class Channel
       class Dispatcher
+        # The payload could not be decoded: the peer's mistake, not the app's, so it is answered but
+        # not reported.
+        class MalformedMessage < StandardError; end
+
         def initialize(commands:, streams:, codec:, session:)
           @commands = commands
           @streams = streams
@@ -27,9 +31,16 @@ module Quicsilver
             stream.write_message encode(error("Unknown WebTransport message type: #{message['type']}"))
             stream.close
           end
+        rescue Quicsilver::Server::WebTransportStream::ResetError
+          # The peer reset the stream: an ordinary disconnect, and nobody is left to reply to.
+          nil
+        rescue MalformedMessage
+          reply_with_error(stream, "Malformed message")
         rescue => exception
-          stream&.write_message encode(error(exception.message))
-          stream&.close
+          # The peer gets a generic reply: the exception's message can carry SQL, record data or
+          # paths. The app's error reporter gets the exception itself.
+          ::Rails.error.report(exception, handled: true, source: "quicsilver.webtransport")
+          reply_with_error(stream, "Internal error")
         end
 
         private
@@ -39,6 +50,17 @@ module Quicsilver
             return unless payload
 
             codec.decode(payload)
+          rescue => error
+            raise MalformedMessage, error.message
+          end
+
+          # Best effort. The stream may already be gone, and a failure here must not replace the
+          # error being answered.
+          def reply_with_error(stream, message)
+            stream&.write_message encode(error(message))
+            stream&.close
+          rescue IOError, Quicsilver::Server::WebTransportStream::ResetError
+            nil
           end
 
           def encode(payload)
