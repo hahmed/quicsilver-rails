@@ -4,6 +4,7 @@ PATH
     quicsilver-rails (0.1.0)
       actioncable (>= 8.0)
       actionpack (>= 8.0)
+      console (~> 1.0)
       quicsilver (~> 0.6.0)
       railties (>= 8.0)
 
