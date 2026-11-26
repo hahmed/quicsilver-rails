@@ -4,15 +4,32 @@ require "minitest/autorun"
 require_relative "../../../lib/quicsilver/middleware/alt_svc"
 
 class QuicsilverMiddlewareAltSvcTest < Minitest::Test
-  def test_adds_default_alt_svc_header
+  def setup
+    @previous_port = ENV.delete("QUICSILVER_PORT")
+  end
+
+  def teardown
+    @previous_port ? ENV["QUICSILVER_PORT"] = @previous_port : ENV.delete("QUICSILVER_PORT")
+  end
+
+  def test_advertises_the_port_the_listener_binds_by_default
     app = ->(_env) { [200, { "content-type" => "text/plain" }, ["ok"]] }
     middleware = Quicsilver::Middleware::AltSvc.new(app)
 
     status, headers, body = middleware.call({})
 
     assert_equal 200, status
-    assert_equal %(h3=":4433"; ma=86400), headers["alt-svc"]
+    assert_equal %(h3=":3443"; ma=86400), headers["alt-svc"]
     assert_equal ["ok"], body
+  end
+
+  def test_advertises_quicsilver_port
+    ENV["QUICSILVER_PORT"] = "443"
+    middleware = Quicsilver::Middleware::AltSvc.new(->(_env) { [200, {}, []] })
+
+    _status, headers, _body = middleware.call({})
+
+    assert_equal %(h3=":443"; ma=86400), headers["alt-svc"]
   end
 
   def test_adds_custom_alt_svc_header

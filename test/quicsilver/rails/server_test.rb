@@ -9,12 +9,24 @@ class QuicsilverRailsServerTest < Minitest::Test
 
   Certificate = Struct.new(:cert_file, :key_file)
 
+  ENV_KEYS = %w[QUICSILVER_SHUTDOWN_TIMEOUT QUICSILVER_PORT].freeze
+
   def setup
-    @previous = ENV.delete("QUICSILVER_SHUTDOWN_TIMEOUT")
+    @previous = ENV_KEYS.to_h { |key| [ key, ENV.delete(key) ] }
   end
 
   def teardown
-    @previous ? ENV["QUICSILVER_SHUTDOWN_TIMEOUT"] = @previous : ENV.delete("QUICSILVER_SHUTDOWN_TIMEOUT")
+    @previous.each { |key, value| value ? ENV[key] = value : ENV.delete(key) }
+  end
+
+  def test_binds_quicsilver_port
+    ENV["QUICSILVER_PORT"] = "443"
+
+    assert_equal 443, start(FakeServer.new)
+  end
+
+  def test_binds_3443_without_quicsilver_port
+    assert_equal 3443, start(FakeServer.new)
   end
 
   def test_shutdown_timeout_comes_from_the_environment
@@ -53,16 +65,18 @@ class QuicsilverRailsServerTest < Minitest::Test
 
   private
 
-  def start(server, shutdown_timeout:)
+  # Starts with the transport stubbed out, and returns the port the server was built to bind.
+  def start(server, **options)
+    bound = nil
     Quicsilver::Transport::Configuration.stub(:new, Object.new) do
-      Quicsilver::Server.stub(:new, server) do
+      Quicsilver::Server.stub(:new, ->(port, **) { bound = port; server }) do
         Quicsilver::Rails::Server.stub(:log_transport_to_rails, nil) do
           ::Rails.stub(:env, ActiveSupport::EnvironmentInquirer.new("test")) do
-            Quicsilver::Rails::Server.start(app: Object.new, port: 0, certificate: Certificate.new("c", "k"),
-              shutdown_timeout: shutdown_timeout)
+            Quicsilver::Rails::Server.start(app: Object.new, certificate: Certificate.new("c", "k"), **options)
           end
         end
       end
     end
+    bound
   end
 end

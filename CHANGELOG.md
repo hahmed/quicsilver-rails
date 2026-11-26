@@ -9,7 +9,7 @@
 - `Quicsilver::WebTransport::Channel`: `command`, `stream`, `datagram` and `codec` macros over a WebTransport session, with `connect`/`disconnect` hooks. `StreamHandler` base class for long-lived streams.
 - Endpoint classes for RPC, server streaming and message streams, and the `webtransport "/path", to:` route helper.
 - `Quicsilver::Rails::DevWebTransportCertificate`: a trusted local certificate shared by the TCP and HTTP/3 listeners, with configurable hosts.
-- `Middleware::AltSvc`, inserted by the engine so browsers discover the HTTP/3 listener.
+- `Middleware::AltSvc`, inserted by the engine so browsers discover the HTTP/3 listener. It advertises the port the listener binds (`QUICSILVER_PORT`, or 3443).
 - Browser helpers (`quicsilver/web_transport`) served as Rails assets.
 - A real-peer integration test: Action Cable over an actual Quicsilver server and client.
 

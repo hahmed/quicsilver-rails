@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
+require_relative "../rails/port"
+
 module Quicsilver
   module Middleware
     # Injects Alt-Svc so browsers can discover the HTTP/3 endpoint served by
-    # Quicsilver over UDP.
+    # Quicsilver over UDP. Advertises the port the listener binds unless told otherwise.
     class AltSvc
-      def initialize(app, port: 4433, max_age: 86_400)
+      def initialize(app, port: Quicsilver::Rails.port, max_age: 86_400)
         @app = app
         @alt_svc_value = %(h3=":#{port}"; ma=#{max_age})
       end

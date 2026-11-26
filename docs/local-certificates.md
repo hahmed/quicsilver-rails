@@ -110,11 +110,10 @@ The TCP HTTPS response should advertise the UDP HTTP/3 listener:
 
 ```ruby
 # config/environments/development.rb
-config.quicsilver.alt_svc = {
-  port: ENV.fetch("QUICSILVER_PORT", 3443).to_i,
-  max_age: 3600
-}
+config.quicsilver.alt_svc = { max_age: 3600 }
 ```
+
+It advertises the port the listener binds (`QUICSILVER_PORT`, or 3443), so the two can't disagree.
 
 Verify it:
 

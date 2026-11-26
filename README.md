@@ -72,11 +72,11 @@ Puma serves HTTPS on TCP 3443 and Quicsilver serves HTTP/3 on UDP 3443, which is
 ```ruby
 # config/environments/development.rb
 if ENV["QUICSILVER_PORT"].present?
-  config.quicsilver.alt_svc = { port: Integer(ENV["QUICSILVER_PORT"]), max_age: 60 }
+  config.quicsilver.alt_svc = { max_age: 60 }
 end
 ```
 
-Gating on the port leaves a plain `bin/dev` untouched. `config.quicsilver.alt_svc = true` uses the defaults.
+Alt-Svc advertises the port the HTTP/3 listener binds: `QUICSILVER_PORT`, or 3443. Gating on it leaves a plain `bin/dev` untouched. `config.quicsilver.alt_svc = true` keeps the default `max_age` of a day. In production, use port 443: it's the UDP port networks are most likely to let through.
 
 Check it from the terminal:
 
@@ -89,7 +89,7 @@ curl -sk --http3-only -o /dev/null -w "%{http_version}\n" https://localhost:3443
 
 | Variable | Default | Effect |
 |---|---|---|
-| `QUICSILVER_PORT` | `3443` | UDP port for HTTP/3 |
+| `QUICSILVER_PORT` | `3443` | UDP port for HTTP/3, and the port Alt-Svc advertises |
 | `QUICSILVER_HOST` | `0.0.0.0` | Address to bind. `0.0.0.0` is IPv4 only; see Quicsilver's notes on IPv6 |
 | `QUICSILVER_DEV_HOSTS` | `localhost,127.0.0.1,::1` | Hostnames in the generated development certificate |
 | `QUICSILVER_SHUTDOWN_TIMEOUT` | Quicsilver's 30s | Seconds a graceful shutdown on INT or TERM may take. A second signal stops at once |

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "quicsilver"
+require_relative "port"
 require "quicsilver/rails/dev_web_transport_certificate"
 require "quicsilver/rails/transport_logger"
 
@@ -16,11 +17,9 @@ module Quicsilver
     # certificate is the same mkcert one Puma serves on TCP, since a browser switching via
     # Alt-Svc validates the UDP listener against the origin it already trusts.
     module Server
-      DEFAULT_PORT = 3443
-
       module_function
 
-      def start(app: ::Rails.application, port: ENV.fetch("QUICSILVER_PORT", DEFAULT_PORT),
+      def start(app: ::Rails.application, port: Quicsilver::Rails.port,
                 address: ENV.fetch("QUICSILVER_HOST", "0.0.0.0"), certificate: DevWebTransportCertificate.fetch,
                 shutdown_timeout: shutdown_timeout_from_env, **transport_options)
         log_to_stdout if ::Rails.env.development?
