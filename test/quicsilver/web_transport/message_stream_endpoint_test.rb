@@ -51,6 +51,16 @@ class QuicsilverWebTransportMessageStreamEndpointTest < Minitest::Test
     ], raw_stream.writes
   end
 
+  class EchoSubclassEndpoint < EchoEndpoint; end
+
+  def test_a_subclass_keeps_its_parents_codec
+    raw_stream = RawStream.new('{"text":"one"}')
+
+    EchoSubclassEndpoint.new({}).handle_stream(raw_stream)
+
+    assert_equal [frame(JSON.generate(echo: "one"))], raw_stream.writes
+  end
+
   def test_nil_return_writes_no_response
     raw_stream = RawStream.new('{"text":"one"}')
     endpoint = SinkEndpoint.new({})

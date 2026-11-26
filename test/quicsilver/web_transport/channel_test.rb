@@ -121,6 +121,37 @@ class QuicsilverWebTransportChannelTest < Minitest::Test
     assert_equal [{ "type" => "error", "error" => "Unknown WebTransport message type: unknown" }], raw_stream.json_messages
   end
 
+  class HealthCommand
+    def self.call(_message) = { type: "ok" }
+  end
+
+  class DropSubclassChannel < DropChannel; end
+
+  def test_a_subclass_keeps_its_parents_datagram_handler
+    session = Session.new(datagrams: ["hype"])
+    channel = DropSubclassChannel.new("quicsilver.webtransport" => session)
+
+    channel.call
+    wait_until { channel.datagrams.any? }
+    session.close
+
+    assert_equal ["hype"], channel.datagrams
+  end
+
+  # A command added to the parent after a subclass was first used (a reopened class, a concern, a
+  # reload in development) must still reach that subclass.
+  def test_a_command_added_to_a_parent_later_reaches_its_subclass
+    parent = Class.new(Quicsilver::WebTransport::Channel) { command "reaction", to: ReactionCommand }
+    subclass = Class.new(parent)
+    subclass.commands
+    parent.command "health", to: HealthCommand
+    raw_stream = RawStream.new(JSON.generate(type: "health"))
+
+    subclass.new("quicsilver.webtransport" => Session.new).handle_stream(raw_stream)
+
+    assert_equal [{ "type" => "ok" }], raw_stream.json_messages
+  end
+
   def test_handles_datagrams_in_channel_context
     channel = DropChannel.new({})
 

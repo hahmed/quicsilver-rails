@@ -28,22 +28,9 @@ module Quicsilver
     class ServerStreamingEndpoint < Endpoint
       include MessageCodec
 
-      class << self
-        def receives(type = nil)
-          @receives = type if type
-          @receives
-        end
-
-        def streams(type = nil)
-          @streams = type if type
-          @streams
-        end
-
-        def codec(value = nil)
-          @codec = value if value
-          @codec || :raw
-        end
-      end
+      setting :receives
+      setting :streams
+      setting :codec, default: :raw
 
       def perform(_request)
         raise NotImplementedError, "#{self.class} must implement #perform"

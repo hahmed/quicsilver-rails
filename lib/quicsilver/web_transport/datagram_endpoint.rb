@@ -19,17 +19,8 @@ module Quicsilver
     class DatagramEndpoint < Endpoint
       include MessageCodec
 
-      class << self
-        def receives(type = nil)
-          @receives = type if type
-          @receives
-        end
-
-        def codec(value = nil)
-          @codec = value if value
-          @codec || :raw
-        end
-      end
+      setting :receives
+      setting :codec, default: :raw
 
       def receive(_message)
         raise NotImplementedError, "#{self.class} must implement #receive"

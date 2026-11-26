@@ -9,46 +9,34 @@ module Quicsilver
     class Channel < Endpoint
       include MessageCodec
 
+      # Wire format for commands, streams and datagrams.
+      #
+      #   class DropChannel < Quicsilver::WebTransport::Channel
+      #     codec :json
+      #   end
+      #
+      # Defaults to :json rather than :raw because channels exchange typed
+      # messages: the dispatcher routes on message["type"], which needs a
+      # structured payload. Subclasses inherit the parent's choice.
+      setting :codec, default: :json
+
+      # Inherited like any setting. Adding to a subclass replaces its copy rather than editing the
+      # parent's, and a subclass that adds nothing keeps reading the parent's.
+      class_attribute :commands, :streams, instance_accessor: false, default: {}.freeze
+      class_attribute :_datagram_handler, instance_accessor: false
+
       class << self
         def command(type, to:)
-          commands[type.to_s] = to
-        end
-
-        # Wire format for commands, streams and datagrams.
-        #
-        #   class DropChannel < Quicsilver::WebTransport::Channel
-        #     codec :json
-        #   end
-        #
-        # Defaults to :json rather than :raw because channels exchange typed
-        # messages: the dispatcher routes on message["type"], which needs a
-        # structured payload. Subclasses inherit the parent's choice.
-        def codec(value = nil)
-          @codec = value if value
-          @codec || inherited_codec
+          self.commands = commands.merge(type.to_s => to).freeze
         end
 
         def stream(type, to:)
-          streams[type.to_s] = to
+          self.streams = streams.merge(type.to_s => to).freeze
         end
 
         def datagram(&block)
-          @datagram_handler = block if block
-          @datagram_handler
+          block ? self._datagram_handler = block : _datagram_handler
         end
-
-        def commands
-          @commands ||= superclass.respond_to?(:commands) ? superclass.commands.dup : {}
-        end
-
-        def streams
-          @streams ||= superclass.respond_to?(:streams) ? superclass.streams.dup : {}
-        end
-
-        private
-          def inherited_codec
-            superclass.respond_to?(:codec) ? superclass.codec : :json
-          end
       end
 
       def handle_stream(raw_stream)

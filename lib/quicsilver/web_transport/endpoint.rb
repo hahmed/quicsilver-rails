@@ -2,6 +2,7 @@
 
 require "rails"
 require "action_dispatch"
+require "active_support/core_ext/class/attribute"
 require "quicsilver/web_transport/thread_runner"
 
 module Quicsilver
@@ -16,6 +17,21 @@ module Quicsilver
         def call(env)
           new(env).call
         end
+
+        private
+          # Declares a class-level macro that subclasses inherit until they set their own:
+          #
+          #   setting :codec, default: :raw   # then `codec :json` in a subclass
+          #
+          # Stored with class_attribute, because an instance variable on the class is not inherited:
+          # a subclass of an endpoint configured `codec :json` would read its own unset value.
+          def setting(name, default: nil)
+            class_attribute :"_#{name}", instance_accessor: false, default: default
+
+            define_singleton_method(name) do |value = nil|
+              value.nil? ? public_send(:"_#{name}") : public_send(:"_#{name}=", value)
+            end
+          end
       end
 
       attr_reader :env, :session, :request

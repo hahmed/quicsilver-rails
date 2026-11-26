@@ -42,6 +42,17 @@ class QuicsilverWebTransportServerStreamingEndpointTest < Minitest::Test
     ], raw_stream.writes
   end
 
+  class CompletionSubclassEndpoint < CompletionEndpoint; end
+
+  def test_a_subclass_keeps_its_parents_codec
+    raw_stream = RawStream.new('{"prompt":"hi"}')
+    session = Session.new(raw_stream)
+    CompletionSubclassEndpoint.new("quicsilver.context" => Context.new(webtransport: session)).call
+    wait_until { session.closed }
+
+    assert_equal [frame(JSON.generate(token: "hi")), frame(JSON.generate(token: "done"))], raw_stream.writes
+  end
+
   def test_hash_return_value_is_one_response_not_key_value_stream
     raw_stream = RawStream.new('{"prompt":"hi"}')
     session = Session.new(raw_stream)

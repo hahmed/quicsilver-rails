@@ -21,6 +21,18 @@ class QuicsilverWebTransportDatagramEndpointTest < Minitest::Test
     end
   end
 
+  class CursorSubclassEndpoint < CursorEndpoint; end
+
+  def test_a_subclass_keeps_its_parents_codec
+    session = Session.new(datagrams: ['{"x":1}'])
+    endpoint = CursorSubclassEndpoint.new("quicsilver.context" => Context.new(webtransport: session))
+
+    endpoint.call
+    wait_until { session.closed }
+
+    assert_equal [{ "x" => 1 }], endpoint.received
+  end
+
   def test_accepts_session_and_receives_decoded_datagrams
     session = Session.new(datagrams: ['{"x":1}', '{"x":2}'])
     endpoint = CursorEndpoint.new("quicsilver.context" => Context.new(webtransport: session))

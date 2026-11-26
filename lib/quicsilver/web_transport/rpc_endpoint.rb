@@ -21,22 +21,9 @@ module Quicsilver
     class RpcEndpoint < Endpoint
       include MessageCodec
 
-      class << self
-        def receives(type = nil)
-          @receives = type if type
-          @receives
-        end
-
-        def returns(type = nil)
-          @returns = type if type
-          @returns
-        end
-
-        def codec(value = nil)
-          @codec = value if value
-          @codec || :raw
-        end
-      end
+      setting :receives
+      setting :returns
+      setting :codec, default: :raw
 
       def perform(_request)
         raise NotImplementedError, "#{self.class} must implement #perform"
