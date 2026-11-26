@@ -5,19 +5,7 @@ source "https://rubygems.org"
 # Specify gem dependencies in quicsilver-rails.gemspec.
 gemspec
 
-github "rails/rails", branch: "main" do
-  gem "rails"
-  gem "actioncable"
-  gem "actionpack"
-  gem "actionview"
-  gem "activesupport"
-  gem "railties"
-end
+# The default for development. CI also runs gemfiles/rails-8.0.gemfile and gemfiles/rails-main.gemfile.
+gem "rails", "~> 8.1.0"
 
-# The pinned Rails main calls JSON.parse(json, options) positionally, which json 3 removed.
-# Later Rails main fixes it but needs Ruby 4.0; hold json back until the Ruby bump.
-gem "json", "< 3"
-
-gem "irb"
-gem "rake", "~> 13.0"
-gem "minitest", "~> 5.16"
+eval_gemfile "gemfiles/development.gemfile"

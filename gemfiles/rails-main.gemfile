@@ -1,0 +1,22 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gemspec path: ".."
+
+# Locked to one revision in rails-main.gemfile.lock, so the job tests a known Rails until the lock
+# is updated, rather than whatever main is today.
+github "rails/rails", branch: "main" do
+  gem "rails"
+  gem "actioncable"
+  gem "actionpack"
+  gem "actionview"
+  gem "activesupport"
+  gem "railties"
+end
+
+# The locked Rails main calls JSON.parse(json, options) positionally, which json 3 removed. Later
+# Rails main fixes it; drop this with the next lock update.
+gem "json", "< 3"
+
+eval_gemfile "development.gemfile"

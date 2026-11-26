@@ -11,13 +11,26 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    name: Ruby ${{ matrix.ruby }}
+  test:
+    runs-on: ubuntu-24.04
+    name: Ruby ${{ matrix.ruby }}, Rails ${{ matrix.rails }}
     strategy:
+      fail-fast: false
       matrix:
-        ruby:
-          - '4.0.5'
+        # Quicsilver ships binaries for Ruby 3.4 and 4.0 only, so there is no ruby-head job: it would
+        # fail to load the extension rather than test anything.
+        ruby: ["3.4", "4.0"]
+        rails: ["8.0", "8.1", "main"]
+        include:
+          - rails: "8.0"
+            gemfile: gemfiles/rails-8.0.gemfile
+          - rails: "8.1"
+            gemfile: Gemfile
+          # Locked to one revision in its lockfile, so this job is as stable as the released ones.
+          - rails: "main"
+            gemfile: gemfiles/rails-main.gemfile
+    env:
+      BUNDLE_GEMFILE: ${{ github.workspace }}/${{ matrix.gemfile }}
 
     steps:
       - uses: actions/checkout@v6

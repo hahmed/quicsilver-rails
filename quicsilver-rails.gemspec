@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.description = "Rails helpers, runners, and API experiments for using Quicsilver WebTransport from Rails applications."
   spec.homepage = "https://github.com/hahmed/quicsilver-rails"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.2.0"
+  spec.required_ruby_version = ">= 3.4.0"
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = spec.homepage
@@ -22,15 +22,15 @@ Gem::Specification.new do |spec|
   spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|
     ls.readlines("\x0", chomp: true).reject do |f|
       (f == gemspec) ||
-        f.start_with?(*%w[bin/ Gemfile .gitignore test/ .github/])
+        f.start_with?(*%w[bin/ Gemfile gemfiles/ .gitignore test/ .github/])
     end
   end
   spec.bindir = "exe"
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "actioncable", ">= 7.1"
-  spec.add_dependency "actionpack", ">= 7.1"
-  spec.add_dependency "railties", ">= 7.1"
+  spec.add_dependency "actioncable", ">= 8.0"
+  spec.add_dependency "actionpack", ">= 8.0"
+  spec.add_dependency "railties", ">= 8.0"
   spec.add_dependency "quicsilver", "~> 0.6.0"
 end

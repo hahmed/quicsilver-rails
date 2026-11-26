@@ -1,0 +1,4 @@
+# Development dependencies shared by every Rails the gem is tested against.
+gem "irb"
+gem "rake", "~> 13.0"
+gem "minitest", "~> 5.16"

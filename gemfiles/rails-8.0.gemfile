@@ -1,0 +1,12 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gemspec path: ".."
+
+gem "rails", "~> 8.0.0"
+
+# Active Support 8.0 passes JSON.generate a quirks_mode: option, which json 3 removed.
+gem "json", "< 3"
+
+eval_gemfile "development.gemfile"
