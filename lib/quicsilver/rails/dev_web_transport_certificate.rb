@@ -2,6 +2,7 @@
 
 require "base64"
 require "fileutils"
+require "ipaddr"
 require "openssl"
 require "pathname"
 require "securerandom"
@@ -9,6 +10,9 @@ require "securerandom"
 module Quicsilver
   module Rails
     class DevWebTransportCertificate
+      # WebTransport's serverCertificateHashes rejects a certificate valid for more than two weeks
+      # (W3C WebTransport, "the total length of the validity period MUST NOT exceed two weeks").
+      # A day short of that leaves room for clock skew.
       VALIDITY_SECONDS = 13 * 24 * 60 * 60
       REGENERATE_WITHIN_SECONDS = 24 * 60 * 60
 
@@ -99,7 +103,10 @@ module Quicsilver
         end
 
         def ip_address?(host)
-          host.match?(/\A[\d.:]+\z/)
+          IPAddr.new(host)
+          true
+        rescue IPAddr::InvalidAddressError
+          false
         end
 
         def mkcert_root
@@ -114,7 +121,11 @@ module Quicsilver
             OpenSSL::X509::Certificate.new(File.read(cert_path)),
             OpenSSL::PKey.read(File.read(key_path))
           ]
-        rescue StandardError
+        rescue StandardError => error
+          # The fallback is a certificate browsers reject, so say why rather than leave it to be found.
+          # Rails' logger rather than Quicsilver's: this runs before Server.start routes the latter.
+          ::Rails.logger&.warn "Could not use the mkcert CA at #{root}: #{error.class}: #{error.message}. " \
+            "Using a self-signed certificate instead, which browsers reject; run `mkcert -install`."
           [nil, nil]
         end
 
