@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+# Serves the app over HTTP/3 (QUIC, on UDP), next to its HTTPS server on TCP.
+require_relative "../config/environment"
+
+Quicsilver::Rails::Server.start

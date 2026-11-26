@@ -78,12 +78,15 @@ class DevWebTransportCertificateTest < Minitest::Test
 
     assert_equal root_certificate.subject, x509.issuer
     assert x509.verify(root_key)
+    refute Certificate.fetch(directory: @directory).self_signed?
   end
 
   def test_signs_itself_without_an_mkcert_root
-    x509 = certificate_at(Certificate.fetch(directory: @directory))
+    certificate = Certificate.fetch(directory: @directory)
+    x509 = certificate_at(certificate)
 
     assert_equal x509.subject, x509.issuer
+    assert certificate.self_signed?
   end
 
   # A self-signed certificate is one the browser will reject, so falling back to it must be visible.

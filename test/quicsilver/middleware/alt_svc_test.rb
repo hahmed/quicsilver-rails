@@ -23,6 +23,21 @@ class QuicsilverMiddlewareAltSvcTest < Minitest::Test
     assert_equal ["ok"], body
   end
 
+  # Whether the engine adds the middleware, from config.quicsilver.alt_svc.
+  def test_is_on_by_default_when_an_http3_listener_is_configured
+    assert_nil Quicsilver::Middleware::AltSvc.options_for(nil, env: {})
+    assert_equal({}, Quicsilver::Middleware::AltSvc.options_for(nil, env: { "QUICSILVER_PORT" => "3443" }))
+  end
+
+  def test_false_turns_it_off_even_with_a_listener_configured
+    assert_nil Quicsilver::Middleware::AltSvc.options_for(false, env: { "QUICSILVER_PORT" => "3443" })
+  end
+
+  def test_true_or_options_turn_it_on_without_a_listener_configured
+    assert_equal({}, Quicsilver::Middleware::AltSvc.options_for(true, env: {}))
+    assert_equal({ max_age: 60 }, Quicsilver::Middleware::AltSvc.options_for({ max_age: 60 }, env: {}))
+  end
+
   def test_advertises_quicsilver_port
     ENV["QUICSILVER_PORT"] = "443"
     middleware = Quicsilver::Middleware::AltSvc.new(->(_env) { [200, {}, []] })

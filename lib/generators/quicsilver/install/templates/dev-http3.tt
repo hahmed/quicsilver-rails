@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+# Runs the app in development over HTTPS on TCP and HTTP/3 on UDP, both on QUICSILVER_PORT. Browsers
+# reach HTTP/3 through the HTTPS server: its Alt-Svc header tells them where to find it.
+
+if ! gem list foreman -i --silent; then
+  echo "Installing foreman..."
+  gem install foreman
+fi
+
+export QUICSILVER_PORT="${QUICSILVER_PORT:-3443}"
+
+# Once, before either server starts, so both serve the same certificate.
+bin/rails quicsilver:certificate || exit 1
+
+exec foreman start -f Procfile.http3.dev "$@"

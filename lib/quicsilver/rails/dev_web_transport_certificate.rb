@@ -16,6 +16,12 @@ module Quicsilver
       VALIDITY_SECONDS = 13 * 24 * 60 * 60
       REGENERATE_WITHIN_SECONDS = 24 * 60 * 60
 
+      # Relative to Rails.root. Puma's SSL bind reads the same files, so the install generator writes
+      # these into Procfile.http3.dev rather than its own copy.
+      DIRECTORY = "tmp/quicsilver/webtransport"
+      CERT_FILE_NAME = "localhost.pem"
+      KEY_FILE_NAME = "localhost-key.pem"
+
       attr_reader :directory
 
       def self.fetch(directory: default_directory)
@@ -23,7 +29,7 @@ module Quicsilver
       end
 
       def self.default_directory
-        ::Rails.root.join("tmp/quicsilver/webtransport")
+        ::Rails.root.join(DIRECTORY)
       end
 
       def initialize(directory:)
@@ -31,16 +37,22 @@ module Quicsilver
       end
 
       def cert_file
-        directory.join("localhost.pem").to_s
+        directory.join(CERT_FILE_NAME).to_s
       end
 
       def key_file
-        directory.join("localhost-key.pem").to_s
+        directory.join(KEY_FILE_NAME).to_s
       end
 
       def sha256
         ensure!
         Base64.strict_encode64(OpenSSL::Digest::SHA256.digest(certificate.to_der))
+      end
+
+      # Signed by itself rather than a local CA such as mkcert's: browsers reject it, so the HTTPS page
+      # shows a warning and its Alt-Svc is ignored.
+      def self_signed?
+        certificate.issuer == certificate.subject
       end
 
       def ensure!

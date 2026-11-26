@@ -23,65 +23,46 @@ It serves an existing Rails app over HTTP/3 beside its usual HTTPS server, and c
 ## Installation
 
 ```ruby
-gem "quicsilver", github: "hahmed/quicsilver"
-gem "quicsilver-rails", github: "hahmed/quicsilver-rails"
+gem "quicsilver-rails"
 ```
 
 ```bash
 bundle install
+bin/rails generate quicsilver:install
+mkcert -install    # once per machine, so browsers trust the development certificate
+bin/dev-http3
 ```
 
-A Rails app then needs four small pieces: a certificate shared by both listeners, a `bin/quicsilver` script, a Procfile, and `Alt-Svc`.
+Then open `https://localhost:3443`. The first page arrives over HTTPS, and the next ones over HTTP/3.
 
-### 1. One certificate for both listeners
+The generator writes files you can read and edit, and running it again changes nothing that's already in place:
 
-Browsers validate the HTTP/3 listener against the origin they reached over TCP, so both must serve the same certificate. Trust a local CA once, then generate the certificate:
+- **`bin/quicsilver`** starts the HTTP/3 server with `Quicsilver::Rails::Server.start`.
+- **`bin/dev-http3`** and **`Procfile.http3.dev`** run Puma on TCP and Quicsilver on UDP, on the same port, the shape production takes. They keep the other processes from your `Procfile.dev`, such as asset watchers.
+- **`<%= quicsilver_meta_tags %>`** goes into your layout's `<head>`, and **`import "quicsilver/cable_boot"`** goes at the top of `app/javascript/application.js`, for [Action Cable over WebTransport](#action-cable-and-turbo-streams-over-webtransport).
 
-```bash
-mkcert -install
-bin/rails runner "Quicsilver::Rails::DevWebTransportCertificate.fetch"
-```
+### The certificate
 
-It writes `tmp/quicsilver/webtransport/localhost.pem` and `localhost-key.pem`. Without mkcert it falls back to a self-signed certificate that browsers reject. Set `QUICSILVER_DEV_HOSTS` before generating it to add hostnames. See [`docs/local-certificates.md`](docs/local-certificates.md).
+Browsers check the HTTP/3 server against the certificate they saw over TCP, so Puma and Quicsilver serve the same one. `bin/dev-http3` creates it before either server starts, with `bin/rails quicsilver:certificate`, in `tmp/quicsilver/webtransport/`. It's signed by mkcert's local CA; without mkcert it signs itself, browsers reject it, and the task says so. Set `QUICSILVER_DEV_HOSTS` to add hostnames. See [`docs/local-certificates.md`](docs/local-certificates.md).
 
-### 2. `bin/quicsilver`
-
-```ruby
-#!/usr/bin/env ruby
-ENV["RAILS_ENV"] ||= "development"
-
-require_relative "../config/environment"
-
-Quicsilver::Rails::Server.start
-```
+### The server
 
 `Server.start` loads the development certificate, tunes the transport for browsers, and writes the transport log through `Rails.logger` (tagged `[quicsilver]`, in `log/<env>.log`), including errors the Rack adapter logs, which would otherwise go to stderr. In development it also logs to the terminal, because this process doesn't go through `rails server`. It takes `port:`, `address:`, `certificate:` and `shutdown_timeout:` keywords, which default to the environment variables below.
 
-### 3. Run both listeners
+### Alt-Svc
 
-```procfile
-# Procfile.dev
-web: bin/rails server -b 'ssl://0.0.0.0:3443?key=tmp/quicsilver/webtransport/localhost-key.pem&cert=tmp/quicsilver/webtransport/localhost.pem'
-h3: QUICSILVER_SHUTDOWN_TIMEOUT=3 bin/quicsilver
-```
-
-Puma serves HTTPS on TCP 3443 and Quicsilver serves HTTP/3 on UDP 3443, which is the shape production takes. foreman kills processes 5s after Ctrl-C, so the shutdown timeout has to fit inside that.
-
-### 4. Advertise HTTP/3
+Browsers find the HTTP/3 server through an `Alt-Svc` header on the HTTPS responses. It's on whenever `QUICSILVER_PORT` is set, which `bin/dev-http3` does, and advertises that port. A plain `bin/dev` sends none. Turn it off with `config.quicsilver.alt_svc = false`, or pass options, such as a shorter cache time in development:
 
 ```ruby
-# config/environments/development.rb
-if ENV["QUICSILVER_PORT"].present?
-  config.quicsilver.alt_svc = { max_age: 60 }
-end
+config.quicsilver.alt_svc = { max_age: 60 }   # browsers stop trying a stopped HTTP/3 server sooner
 ```
 
-Alt-Svc advertises the port the HTTP/3 listener binds: `QUICSILVER_PORT`, or 3443. Gating on it leaves a plain `bin/dev` untouched. `config.quicsilver.alt_svc = true` keeps the default `max_age` of a day. In production, use port 443: it's the UDP port networks are most likely to let through.
+In production, use port 443: it's the UDP port networks are most likely to let through.
 
 Check it from the terminal:
 
 ```bash
-curl -sk -o /dev/null -D - https://localhost:3443/ | grep -i alt-svc   # alt-svc: h3=":3443"; ma=60
+curl -sk -o /dev/null -D - https://localhost:3443/ | grep -i alt-svc   # alt-svc: h3=":3443"; ma=86400
 curl -sk --http3-only -o /dev/null -w "%{http_version}\n" https://localhost:3443/   # 3
 ```
 
@@ -99,15 +80,13 @@ curl -sk --http3-only -o /dev/null -w "%{http_version}\n" https://localhost:3443
 
 Browsers don't expose WebSockets over HTTP/3 to JavaScript, so WebTransport is how a browser gets realtime over QUIC. The adapter carries Action Cable over one WebTransport stream; channels, subscriptions and `turbo_stream_from` are unchanged.
 
-Import the boot module **before** Turbo. Turbo captures the WebSocket class when its module is evaluated, so anything later is too late:
+The install generator adds the two pieces it needs. By hand, for an app it couldn't edit: import the boot module **before** Turbo, which captures the WebSocket class as it loads, and render the tags in the layout:
 
 ```js
 // app/javascript/application.js
 import "quicsilver/cable_boot"
 import "@hotwired/turbo-rails"
 ```
-
-Render the tags in the layout:
 
 ```erb
 <%# layout <head> %>

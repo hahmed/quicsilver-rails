@@ -25,10 +25,9 @@ module Quicsilver
     end
 
     initializer "quicsilver.alt_svc" do |app|
-      next unless app.config.quicsilver.alt_svc
-
-      options = app.config.quicsilver.alt_svc == true ? {} : app.config.quicsilver.alt_svc
-      app.middleware.insert_before 0, Quicsilver::Middleware::AltSvc, **options
+      if (options = Quicsilver::Middleware::AltSvc.options_for(app.config.quicsilver.alt_svc))
+        app.middleware.insert_before 0, Quicsilver::Middleware::AltSvc, **options
+      end
     end
 
     initializer "quicsilver.request_protocol" do

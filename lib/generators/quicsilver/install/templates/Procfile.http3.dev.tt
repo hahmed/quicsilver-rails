@@ -1,0 +1,8 @@
+# Puma serves HTTPS on TCP and Quicsilver serves HTTP/3 on UDP, both on QUICSILVER_PORT. Browsers reach
+# Puma first, and its Alt-Svc header points them at HTTP/3. Started by bin/dev-http3.
+web: bin/rails server -b "ssl://0.0.0.0:${QUICSILVER_PORT}?key=<%= certificate_path(:KEY_FILE_NAME) %>&cert=<%= certificate_path(:CERT_FILE_NAME) %>"
+# foreman stops processes 5s after Ctrl-C, so the graceful shutdown has to fit inside that.
+h3: QUICSILVER_SHUTDOWN_TIMEOUT=3 bin/quicsilver
+<% other_dev_processes.each do |process| -%>
+<%= process %>
+<% end -%>
