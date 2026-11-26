@@ -98,29 +98,20 @@ module Quicsilver
       end
 
       def runner
-        if defined?(::Rails) && ::Rails.respond_to?(:application) && ::Rails.application
-          ::Rails.application.config.quicsilver.webtransport_runner
-        else
-          ThreadRunner.new
-        end
+        rails_app ? rails_app.config.quicsilver.webtransport_runner : ThreadRunner.new
       end
 
       def executor
-        if defined?(::Rails) && ::Rails.respond_to?(:application) && ::Rails.application
-          ::Rails.application.executor
-        else
-          InlineExecutor
-        end
+        rails_app ? rails_app.executor : InlineExecutor
       end
 
       def build_request(env)
-        environment = if defined?(::Rails) && ::Rails.respond_to?(:application) && ::Rails.application
-          ::Rails.application.env_config.merge(env)
-        else
-          env
-        end
+        ActionDispatch::Request.new(rails_app ? rails_app.env_config.merge(env) : env)
+      end
 
-        ActionDispatch::Request.new(environment)
+      # nil outside a booted app, as in this gem's own tests.
+      def rails_app
+        ::Rails.application
       end
 
       def accepted

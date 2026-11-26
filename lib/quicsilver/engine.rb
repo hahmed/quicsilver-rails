@@ -7,8 +7,8 @@ module Quicsilver
   class Engine < ::Rails::Engine
     config.quicsilver = ActiveSupport::OrderedOptions.new
 
-    initializer "quicsilver.executor" do |app|
-      config.quicsilver.executor ||= app.executor
+    # Runs each WebTransport endpoint's long-lived work; swap in another runner (fibers, say) here.
+    initializer "quicsilver.webtransport_runner" do
       config.quicsilver.webtransport_runner ||= Quicsilver::WebTransport::ThreadRunner.new
     end
 

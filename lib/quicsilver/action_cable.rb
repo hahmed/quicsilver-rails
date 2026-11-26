@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "action_cable"
+
 # Loads ActionCable::Server::Socket on Rails versions that have it; see .socket_owner.
 begin
   require "action_cable/server/socket"

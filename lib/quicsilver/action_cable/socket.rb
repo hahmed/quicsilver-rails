@@ -63,6 +63,7 @@ module Quicsilver
       def close(_code = nil, _reason = nil)
         @open = false
         stream&.close
+      ensure
         session&.close
       end
 
@@ -83,10 +84,6 @@ module Quicsilver
         [500, {}, []]
       end
 
-      private
-
-      attr_reader :event_target
-
       def self.default_protocols
         if ::ActionCable.const_defined?(:INTERNAL)
           ::ActionCable::INTERNAL[:protocols]
@@ -94,6 +91,10 @@ module Quicsilver
           ["actioncable-v1-json"]
         end
       end
+
+      private
+
+      attr_reader :event_target
 
       def attach_stream(raw_stream)
         # One stream carries the cable protocol. A client that opens another

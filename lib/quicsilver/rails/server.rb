@@ -17,6 +17,18 @@ module Quicsilver
     # certificate is the same mkcert one Puma serves on TCP, since a browser switching via
     # Alt-Svc validates the UDP listener against the origin it already trusts.
     module Server
+      # Transport settings for browsers, over Quicsilver's defaults. Overridden by keywords to .start.
+      TRANSPORT_DEFAULTS = {
+        # Ping an idle connection every 20s so NATs keep its UDP mapping. Quicsilver doesn't ping
+        # by default.
+        keep_alive_interval_ms: 20_000,
+        # How long a connection may go silent before it is dropped. Quicsilver's default is 30s.
+        idle_timeout_ms: 120_000,
+        # Unidirectional streams the browser may have open at once. HTTP/3 itself uses three, and
+        # WebTransport apps open more, so Quicsilver's default of 10 leaves little room.
+        max_unidirectional_streams: 100
+      }.freeze
+
       module_function
 
       def start(app: ::Rails.application, port: Quicsilver::Rails.port,
@@ -26,9 +38,7 @@ module Quicsilver
         log_transport_to_rails
 
         configuration = Quicsilver::Transport::Configuration.new \
-          certificate.cert_file, certificate.key_file,
-          idle_timeout_ms: 120_000, keep_alive_interval_ms: 20_000, max_unidirectional_streams: 100,
-          **transport_options
+          certificate.cert_file, certificate.key_file, **TRANSPORT_DEFAULTS, **transport_options
 
         server = Quicsilver::Server.new Integer(port), address: address, app: app, server_configuration: configuration
         server.shutdown_timeout = shutdown_timeout if shutdown_timeout

@@ -55,6 +55,15 @@ class QuicsilverWebTransportFramedStreamTest < Minitest::Test
     assert_nil framed.read_message
   end
 
+  # The length prefix comes from the peer; a huge one must not make the reader buffer it.
+  def test_a_frame_larger_than_the_limit_is_refused
+    stream = Stream.new([11].pack("N") + "hello world")
+    framed = Quicsilver::WebTransport::FramedStream.new(stream, max_message_size: 10)
+
+    error = assert_raises(Quicsilver::Error) { framed.read_message }
+    assert_equal "WebTransport message of 11 bytes is over the 10 byte limit", error.message
+  end
+
   def test_write_message_frames_payload
     stream = Stream.new
     framed = Quicsilver::WebTransport::FramedStream.new(stream)

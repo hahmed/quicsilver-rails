@@ -45,7 +45,9 @@ module Quicsilver
         return nil if @buffer.bytesize < 4
 
         length = @buffer.byteslice(0, 4).unpack1("N")
-        raise Error, "Action Cable WebTransport message too large" if length > @max_message_size
+        if length > @max_message_size
+          raise Error, "WebTransport message of #{length} bytes is over the #{@max_message_size} byte limit"
+        end
         return nil if @buffer.bytesize < 4 + length
 
         message = @buffer.byteslice(4, length)

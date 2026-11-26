@@ -163,6 +163,19 @@ class QuicsilverActionCableSocketTest < Minitest::Test
     refute first.closed
   end
 
+  def test_close_still_closes_the_session_when_closing_the_stream_fails
+    stream = Stream.new(handshake, open: true)
+    stream.define_singleton_method(:close) { raise IOError, "stream already gone" }
+    session = Session.new(stream)
+    socket = build_socket(session: session)
+    socket.rack_response
+    session.deliver_stream
+    wait_until { socket.alive? }
+
+    assert_raises(IOError) { socket.close }
+    refute session.open?, "a stream that fails to close must not leave its session open"
+  end
+
   def test_transmit_writes_to_webtransport_stream
     stream = Stream.new(handshake, open: true)
     session = Session.new(stream)
