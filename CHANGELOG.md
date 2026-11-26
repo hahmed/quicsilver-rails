@@ -1,21 +1,27 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [Unreleased]
 
-## [0.1.0] - 2026-11-17
+First release. Requires Ruby 3.4+, Rails 8.0+ and Quicsilver 0.6.
 
 ### Added
 
-- Action Cable over WebTransport. `quicsilver/action_cable` provides a `WebTransportSocket` with the `WebSocket` surface; `installWebTransportCable({ ActionCable })` swaps it into `@rails/actioncable`, so unchanged channels and `turbo_stream_from` run over one HTTP/3 bidirectional stream. The server adapter works on Rails 8.0 and newer. Falls back to WebSockets where the browser has no WebTransport.
-- A WebTransport cable authenticates with the page's cookies, so `ApplicationCable::Connection` needs no change. Browsers send none on a WebTransport CONNECT; `quicsilver_meta_tags` renders the cookies named in `config.quicsilver.cable_cookies`, encrypted, and the adapter restores them before `connect`. A separate `cable_credential:` remains available.
-- `Quicsilver::WebTransport::Channel`: `command`, `stream`, `datagram` and `codec` macros over a WebTransport session, with `connect`/`disconnect` hooks. `StreamHandler` base class for long-lived streams. A handler that raises is reported to `Rails.error`, and the peer gets a generic error reply rather than the exception's message.
-- Endpoint classes for RPC, server streaming and message streams, and the `webtransport "/path", to:` route helper.
-- `Quicsilver::Rails::DevWebTransportCertificate`: a trusted local certificate shared by the TCP and HTTP/3 listeners, with configurable hosts.
-- `Middleware::AltSvc`, inserted by the engine so browsers discover the HTTP/3 listener. It advertises the port the listener binds (`QUICSILVER_PORT`, or 3443).
-- Browser helpers (`quicsilver/web_transport`) served as Rails assets.
-- A real-peer integration test: Action Cable over an actual Quicsilver server and client.
+- Serve a Rails app over HTTP/3, next to its usual HTTPS server, with `Quicsilver::Rails::Server.start`.
+- Browsers find the HTTP/3 server on their own: an `Alt-Svc` header advertises it on the port it listens on.
+- `request.http3?` tells a controller or view whether the request arrived over HTTP/3.
+- A local development certificate that browsers trust, shared by the HTTPS and HTTP/3 servers.
+- Action Cable and Turbo Streams over WebTransport, with no changes to your channels. Browsers that can't use WebTransport stay on WebSockets.
+- WebTransport cables sign in with the page's cookies, so `ApplicationCable::Connection` doesn't change.
+- `quicsilver_meta_tags`, one helper for everything a page's `<head>` needs.
+- WebTransport endpoints for realtime features beyond Action Cable: channels, request/response, server streaming, message streams and datagrams, mounted with a `webtransport` route.
+- Errors raised in WebTransport handlers go to `Rails.error`; the client gets a generic error.
+- Browser JavaScript helpers, pinned in your importmap automatically.
+- Quicsilver's logs, and the HTTP/3 server's errors, appear in the Rails log.
+- Settings through environment variables: `QUICSILVER_PORT`, `QUICSILVER_HOST`, `QUICSILVER_DEV_HOSTS`, `QUICSILVER_DEBUG` and `QUICSILVER_SHUTDOWN_TIMEOUT`.
 
-### Changed
-
-- Depends on quicsilver `~> 0.6.0` from rubygems rather than a git ref. 0.6.0 is the first release with `Server#shutdown_timeout=`, which `QUICSILVER_SHUTDOWN_TIMEOUT` sets.
-- `FramedStream` reads the core stream directly; callback-style (`on_data`) streams are no longer adapted.
-- A send on a cable socket that is not open reports through `onerror`; `onclose` reports what the transport did rather than what was requested; a second cable stream on a session is closed.
-
+[Unreleased]: https://github.com/hahmed/quicsilver-rails/commits/main
