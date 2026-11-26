@@ -59,6 +59,18 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     assert_file "app/views/layouts/application.html.erb", %r{<%= quicsilver_meta_tags %>\n\s*</head>}
   end
 
+  # A layout that renders its <head> from a partial has no </head> to insert before.
+  def test_says_where_the_tags_go_when_the_layout_renders_its_head_from_a_partial
+    write "app/views/layouts/application.html.erb", %(<html>\n  <%= render "layouts/shared/head" %>\n</html>\n)
+
+    output = run_generator
+
+    assert_match(%r{add <%= quicsilver_meta_tags %> to the <head> app/views/layouts/application.html.erb renders}, output)
+    assert_file "app/views/layouts/application.html.erb" do |layout|
+      refute_includes layout, "quicsilver_meta_tags"
+    end
+  end
+
   # Turbo captures the WebSocket class as it loads, so the import has to come first.
   def test_imports_cable_boot_before_everything_else
     write "config/importmap.rb", %(pin "application"\n)

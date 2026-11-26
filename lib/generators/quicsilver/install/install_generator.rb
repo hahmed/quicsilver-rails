@@ -38,8 +38,14 @@ module Quicsilver
       end
 
       def add_meta_tags_to_layout
-        if app_file?(LAYOUT)
+        layout = app_file?(LAYOUT) ? File.read(File.join(destination_root, LAYOUT)) : ""
+
+        if layout.include?(META_TAGS)
+          say_status :identical, LAYOUT
+        elsif layout.match?(%r{</head>})
           insert_into_file LAYOUT, "    #{META_TAGS}\n", before: %r{^\s*</head>}
+        elsif app_file?(LAYOUT)
+          say_status :skip, "No </head> in #{LAYOUT}: add #{META_TAGS} to the <head> #{LAYOUT} renders", :yellow
         else
           say_status :skip, "No #{LAYOUT}: add #{META_TAGS} to your layout's <head>", :yellow
         end
