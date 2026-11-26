@@ -61,15 +61,6 @@ class MetaTagsHelperTest < Minitest::Test
     end
   end
 
-  def test_rails_without_the_socket_seam_gets_no_cable_tags
-    Quicsilver::ActionCable.stub(:available?, false) do
-      html = View.new("HTTP/3").quicsilver_meta_tags(cable_credential: "abc")
-
-      refute_includes html, "quicsilver-cable"
-      assert_includes html, "pinned-hash", "WebTransport endpoints still need the certificate on older Rails"
-    end
-  end
-
   private
     def with_cookie_bridge
       previous = Quicsilver::ActionCable.cookie_bridge

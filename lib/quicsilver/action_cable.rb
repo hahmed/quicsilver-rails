@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
-# The adapter plugs into ActionCable::Server::Socket, which only Rails main (8.2.0.alpha) has.
-# Rails 8.1 and earlier build connections on ActionCable::Connection::WebSocket instead, so there is
-# nothing to plug into. The socket file is only loaded where the seam exists: loading it elsewhere
-# would define an empty ActionCable::Server::Socket that nothing uses.
+# Loads ActionCable::Server::Socket on Rails versions that have it; see .socket_owner.
 begin
   require "action_cable/server/socket"
 rescue LoadError
@@ -13,7 +10,6 @@ require "quicsilver/action_cable/cookie_bridge"
 
 module Quicsilver
   module ActionCable
-    SEAM_AVAILABLE = defined?(::ActionCable::Server::Socket) ? true : false
     # Where the WebTransport socket puts the credential from the client's
     # handshake frame. Read it through .credential rather than by key.
     CREDENTIAL_ENV_KEY = "quicsilver.cable.credential"
@@ -40,22 +36,26 @@ module Quicsilver
         end
     end
 
+    # Swaps Action Cable's WebSocket wrapper for the WebTransport socket when the request is a
+    # WebTransport session. Every other request keeps its WebSocket.
     module SocketSelection
       def initialize(server, env, coder: ActiveSupport::JSON)
         super
 
         return unless Quicsilver::WebTransport.from_env(env)
 
-        @websocket = ::ActionCable::Server::Socket::WebTransport.new(env, self, event_loop)
+        @websocket = Quicsilver::ActionCable::Socket.new(env, self, event_loop)
       end
     end
 
     module_function
 
-    # Whether this Rails can carry Action Cable over WebTransport. The page helpers check it, so
-    # an app on Rails 8.1 never moves its cable onto a transport the server can't accept.
-    def available?
-      SEAM_AVAILABLE
+    # The class that builds a request's socket, in #initialize(server, env, coder:), as
+    # `@websocket = WebSocket.new(env, self, event_loop)`. Rails 8.0 and 8.1 do it in the connection;
+    # later Rails moved it into ActionCable::Server::Socket. Asked of Rails rather than inferred from
+    # its version number, so a release that moves it again fails loudly in the tests.
+    def socket_owner
+      defined?(::ActionCable::Server::Socket) ? ::ActionCable::Server::Socket : ::ActionCable::Connection::Base
     end
 
     # Shared by the page helper, which issues the token, and the socket, which reads it. Built from
@@ -68,23 +68,14 @@ module Quicsilver
       @cookie_bridge = bridge
     end
 
-    # Installs the adapter, or warns once and does nothing where Rails has no socket seam. Either
-    # way connections get #quicsilver_cable_credential, which is nil without the adapter.
-    def install!(logger: (::Rails.logger if defined?(::Rails)) || Quicsilver.logger)
+    def install!
       return if @installed
 
       ::ActionCable::Connection::Base.include(Connection)
-
-      if available?
-        ::ActionCable::Server::Socket.prepend(SocketSelection)
-      else
-        logger&.warn "quicsilver-rails: Action Cable over WebTransport needs Rails main (8.2.0.alpha); " \
-          "Action Cable #{::ActionCable.version} has no ActionCable::Server::Socket, so cables stay on WebSocket."
-      end
-
+      socket_owner.prepend(SocketSelection)
       @installed = true
     end
   end
 end
 
-require "action_cable/server/socket/web_transport" if Quicsilver::ActionCable.available?
+require "quicsilver/action_cable/socket"

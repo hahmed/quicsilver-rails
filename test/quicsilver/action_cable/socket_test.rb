@@ -2,7 +2,7 @@
 
 require "test_helper"
 
-class ActionCableWebTransportSocketTest < Minitest::Test
+class QuicsilverActionCableSocketTest < Minitest::Test
   class EventTarget
     attr_reader :opened, :messages, :closed, :errors
 
@@ -186,7 +186,7 @@ class ActionCableWebTransportSocketTest < Minitest::Test
     target = EventTarget.new
     target.define_singleton_method(:on_open) { credential_at_open = env[Quicsilver::ActionCable::CREDENTIAL_ENV_KEY] }
 
-    socket = ::ActionCable::Server::Socket::WebTransport.new(env, target)
+    socket = Quicsilver::ActionCable::Socket.new(env, target)
     socket.rack_response
     session.deliver_stream
     wait_until { credential_at_open != :not_opened }
@@ -207,7 +207,7 @@ class ActionCableWebTransportSocketTest < Minitest::Test
     target.define_singleton_method(:request) { memoized }
     target.define_singleton_method(:on_open) { credential_at_open = Quicsilver::ActionCable.credential(memoized) }
 
-    socket = ::ActionCable::Server::Socket::WebTransport.new(env, target)
+    socket = Quicsilver::ActionCable::Socket.new(env, target)
     socket.rack_response
     session.deliver_stream
     wait_until { credential_at_open != :not_opened }
@@ -222,6 +222,16 @@ class ActionCableWebTransportSocketTest < Minitest::Test
     with_cookie_bridge do |bridge|
       seen = cookie_seen_at_open(handshake(cookies: bridge.token_for("session_token" => "signed-session")),
         build_jar_early: true)
+
+      assert_equal "signed-session", seen
+    end
+  end
+
+  # On Rails 8.0 and 8.1 the event target is the connection itself, whose #request is private.
+  def test_handshake_cookies_reach_a_connection_whose_request_is_private
+    with_cookie_bridge do |bridge|
+      seen = cookie_seen_at_open(handshake(cookies: bridge.token_for("session_token" => "signed-session")),
+        build_jar_early: true, private_request: true)
 
       assert_equal "signed-session", seen
     end
@@ -298,7 +308,7 @@ class ActionCableWebTransportSocketTest < Minitest::Test
 
   # The session_token cookie #connect would read, given a handshake frame. Mirrors Rails: the
   # request #connect uses is a copy of env, memoized when the CONNECT is logged.
-  def cookie_seen_at_open(frame, env: {}, build_jar_early: false)
+  def cookie_seen_at_open(frame, env: {}, build_jar_early: false, private_request: false)
     session = Session.new(Stream.new(frame, open: true))
     env = env.merge("quicsilver.context" => Context.new(webtransport: session))
     request = ActionDispatch::Request.new(env.dup)
@@ -306,9 +316,10 @@ class ActionCableWebTransportSocketTest < Minitest::Test
     seen = :not_opened
     target = EventTarget.new
     target.define_singleton_method(:request) { request }
+    target.singleton_class.send(:private, :request) if private_request
     target.define_singleton_method(:on_open) { seen = request.cookie_jar["session_token"] }
 
-    ::ActionCable::Server::Socket::WebTransport.new(env, target).rack_response
+    Quicsilver::ActionCable::Socket.new(env, target).rack_response
     session.deliver_stream
     wait_until { seen != :not_opened }
     seen
@@ -316,6 +327,6 @@ class ActionCableWebTransportSocketTest < Minitest::Test
 
   def build_socket(session: Session.new(Stream.new), target: EventTarget.new)
     env = { "quicsilver.context" => Context.new(webtransport: session) }
-    ::ActionCable::Server::Socket::WebTransport.new(env, target)
+    Quicsilver::ActionCable::Socket.new(env, target)
   end
 end

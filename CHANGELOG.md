@@ -4,7 +4,7 @@
 
 ### Added
 
-- Action Cable over WebTransport. `quicsilver/action_cable` provides a `WebTransportSocket` with the `WebSocket` surface; `installWebTransportCable({ ActionCable })` swaps it into `@rails/actioncable`, so unchanged channels and `turbo_stream_from` run over one HTTP/3 bidirectional stream. The server adapter plugs into `ActionCable::Server::Socket` (Rails 8.2 / main). Falls back to WebSockets where the browser has no WebTransport.
+- Action Cable over WebTransport. `quicsilver/action_cable` provides a `WebTransportSocket` with the `WebSocket` surface; `installWebTransportCable({ ActionCable })` swaps it into `@rails/actioncable`, so unchanged channels and `turbo_stream_from` run over one HTTP/3 bidirectional stream. The server adapter works on Rails 8.0 and newer. Falls back to WebSockets where the browser has no WebTransport.
 - A WebTransport cable authenticates with the page's cookies, so `ApplicationCable::Connection` needs no change. Browsers send none on a WebTransport CONNECT; `quicsilver_meta_tags` renders the cookies named in `config.quicsilver.cable_cookies`, encrypted, and the adapter restores them before `connect`. A separate `cable_credential:` remains available.
 - `Quicsilver::WebTransport::Channel`: `command`, `stream`, `datagram` and `codec` macros over a WebTransport session, with `connect`/`disconnect` hooks. `StreamHandler` base class for long-lived streams. A handler that raises is reported to `Rails.error`, and the peer gets a generic error reply rather than the exception's message.
 - Endpoint classes for RPC, server streaming and message streams, and the `webtransport "/path", to:` route helper.

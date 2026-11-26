@@ -3,9 +3,7 @@
 Experimental. Moves Action Cable's transport from a TCP WebSocket onto an HTTP/3 stream, leaving
 channels, subscriptions and the JSON protocol untouched. Turbo Streams ride along unchanged.
 
-**Requires Rails main (8.2.0.alpha).** The adapter plugs into `ActionCable::Server::Socket`, which
-Rails 8.1 and earlier don't have. On those versions the cable stays on WebSocket: the cable tags
-don't render, and `install!` logs a warning at boot.
+**Requires Rails 8.0 or newer.** CI runs Rails 8.0, 8.1 and main.
 
 ## Why WebTransport rather than WebSockets over HTTP/3
 
@@ -51,8 +49,7 @@ On a page served over HTTP/3 it renders:
 
 - the development certificate hash, so the browser accepts a local CA (development only; see
   [`local-certificates.md`](local-certificates.md));
-- the `quicsilver-cable` marker, which tells `cable_boot` to move the cable, when this Rails can carry
-  it (`Quicsilver::ActionCable.available?`);
+- the `quicsilver-cable` marker, which tells `cable_boot` to move the cable;
 - the cable's cookies, encrypted (see [Authentication](#authentication));
 - a separate cable credential, if you pass `cable_credential:`.
 
@@ -117,7 +114,6 @@ The cable follows the page, with no configuration:
 |---|---|
 | Page arrived over HTTP/3 | WebTransport |
 | Page arrived over TCP (first visit, UDP blocked, plain `bin/dev`) | WebSocket. No cable tags render, so `cable_boot` does nothing |
-| Rails 8.1 or earlier | WebSocket. No cable tags render, and `install!` logs a warning |
 | WebTransport session fails to open | WebSocket for the rest of the page, with one console warning |
 | WebTransport session opened, then dropped | Reconnects over WebTransport |
 
@@ -140,13 +136,16 @@ It returns `false`, and leaves the module alone, where `WebTransport` is undefin
 
 ## How it fits together
 
-`ActionCable::Server::Socket` reads `@websocket` through a five-method surface (`possible?`,
-`alive?`, `transmit`, `close`, `rack_response`), so no Rails change is needed.
+Action Cable reads its socket through a six-method surface (`possible?`, `alive?`, `transmit`,
+`close`, `protocol`, `rack_response`), so no Rails change is needed. The socket is built in one
+constructor, `#initialize(server, env, coder:)`, which Rails 8.0 and 8.1 put in
+`ActionCable::Connection::Base` and later Rails moved into `ActionCable::Server::Socket`. The engine
+prepends into whichever this Rails has, found by asking for the class rather than by version.
 
 | Layer | Piece |
 |---|---|
 | Rails admission | `Quicsilver::ActionCable::SocketSelection`, prepended by the engine |
-| Server transport | `ActionCable::Server::Socket::WebTransport` |
+| Server transport | `Quicsilver::ActionCable::Socket` |
 | Wire framing | `Quicsilver::WebTransport::FramedStream` (4-byte big-endian length prefix) |
 | Browser transport | `WebTransportSocket` in `quicsilver/action_cable` |
 

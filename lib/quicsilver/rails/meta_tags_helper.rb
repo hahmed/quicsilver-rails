@@ -10,7 +10,7 @@ module Quicsilver
     #
     # - the development certificate hash, so the browser accepts a local CA for WebTransport;
     # - the quicsilver-cable marker, which tells quicsilver/cable_boot to move the cable onto
-    #   WebTransport, when this Rails can carry it there (Quicsilver::ActionCable.available?);
+    #   WebTransport;
     # - the cable's cookies, encrypted, so #connect finds the session as it does over a WebSocket
     #   (see Quicsilver::ActionCable::CookieBridge);
     # - a separate cable credential, for apps that pass one.
@@ -31,22 +31,17 @@ module Quicsilver
 
       # Tells quicsilver/cable_boot to move the cable onto WebTransport.
       def quicsilver_cable_meta_tag
-        if quicsilver_cable_over_web_transport?
+        if request.http3?
           tag.meta(name: CABLE_META_NAME, content: "webtransport")
         end
       end
 
       # The allowlisted cookies, encrypted, for the cable to send back in its handshake.
       def quicsilver_cable_cookies_meta_tag
-        if quicsilver_cable_over_web_transport? && (token = Quicsilver::ActionCable.cookie_bridge&.token_for(request.cookies))
+        if request.http3? && (token = Quicsilver::ActionCable.cookie_bridge&.token_for(request.cookies))
           tag.meta(name: COOKIES_META_NAME, content: token)
         end
       end
-
-      private
-        def quicsilver_cable_over_web_transport?
-          request.http3? && Quicsilver::ActionCable.available?
-        end
     end
   end
 end

@@ -11,14 +11,14 @@ It serves an existing Rails app over HTTP/3 beside its usual HTTPS server, and c
 - Advertise HTTP/3 from an existing HTTPS Rails app with `Alt-Svc`.
 - Serve the same Rails app over HTTP/3 with Quicsilver, on the same host and port number as TCP HTTPS.
 - Normal Rails controllers, middleware, views, assets, cookies and sessions over HTTP/3.
-- Action Cable and Turbo Streams over WebTransport, falling back to WebSocket when a client can't use it. Requires Rails main; see [Requirements](#requirements).
+- Action Cable and Turbo Streams over WebTransport, falling back to WebSocket when a client can't use it.
 - Experimental WebTransport endpoints for browser realtime streams.
 
 ## Requirements
 
-- Ruby 3.4 or newer.
-- Quicsilver from `main`.
-- **The Action Cable adapter needs Rails main (8.2.0.alpha).** It plugs into `ActionCable::Server::Socket`, which Rails 8.1 and earlier don't have. On those versions the cable stays on WebSocket and the gem logs a warning at boot. Serving pages over HTTP/3 doesn't use that seam; the gemspec allows Rails 7.1 and later, but CI only runs against Rails main.
+- Ruby 3.4 or newer, the oldest Ruby Quicsilver ships a binary for.
+- Rails 8.0 or newer. CI runs Rails 8.0, 8.1 and main.
+- Quicsilver 0.6.
 
 ## Installation
 
@@ -127,7 +127,6 @@ The cable follows the page:
 
 - A page served over HTTP/3 gets the tags, and the cable uses WebTransport.
 - A page served over TCP gets none (`request.http3?` is false), and the cable uses WebSocket.
-- On Rails 8.1 and earlier the cable tags never render, so the cable stays on WebSocket, and `install!` logs a warning at boot.
 - A WebTransport session that fails to open falls back to WebSocket for the rest of the page, with one console warning.
 
 See [`docs/action-cable.md`](docs/action-cable.md) for how it fits together, verification and limits.
