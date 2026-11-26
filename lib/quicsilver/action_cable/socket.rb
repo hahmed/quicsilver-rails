@@ -183,9 +183,17 @@ module Quicsilver
       #
       # Never replaces cookies the request really carried.
       def store_cookies(token)
-        header = Quicsilver::ActionCable.cookie_bridge&.read(token)
-        return unless header
+        # A signed-out page renders no token: an ordinary anonymous cable.
+        return if token.blank?
 
+        header = Quicsilver::ActionCable.cookie_bridge&.read(token)
+        unless header
+          Quicsilver.logger.warn "A WebTransport cable sent a cookie token that has expired or was not issued by " \
+            "this app, so it connects without cookies. A page reload issues a new one."
+          return
+        end
+
+        Quicsilver.logger.debug { "WebTransport cable restored cookies: #{header.split("; ").map { _1.split("=", 2).first }.join(", ")}" }
         request_envs.each do |env|
           next if env["HTTP_COOKIE"].present?
 

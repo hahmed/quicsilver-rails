@@ -57,7 +57,11 @@ On a page served over TCP it renders nothing. The parts are also available on th
 `quicsilver_webtransport_certificate_meta_tag`, `quicsilver_cable_meta_tag`,
 `quicsilver_cable_cookies_meta_tag` and `quicsilver_cable_credential_meta_tag(credential)`.
 
-### 3. Name the cookies the connection reads
+### 3. If your connection reads a custom cookie, name it
+
+By default the cable carries the Rails session cookie and `session_id`, which cover Devise,
+`session[:user_id]` and Rails' authentication generator. An app that signs in with its own cookie
+names it instead:
 
 ```ruby
 # config/application.rb
@@ -70,8 +74,9 @@ Browsers send no cookies on a WebTransport CONNECT (the W3C spec fetches it with
 `omit`), so an unchanged `ApplicationCable::Connection` would find nobody. The page that opens the
 cable did arrive with cookies, so the gem gives them back:
 
-1. `quicsilver_meta_tags` encrypts the cookies named in `config.quicsilver.cable_cookies` into a
-   token, with a key derived from `secret_key_base`, and renders it.
+1. `quicsilver_meta_tags` encrypts the cable's cookies (`config.quicsilver.cable_cookies`, or the
+   session cookie and `session_id`) into a token, with a key derived from `secret_key_base`, and
+   renders it.
 2. The socket sends the token in its first frame, not the URL, so it stays out of access logs:
    `{"quicsilver_handshake":{"cookies":"…","credential":null}}`.
 3. The adapter decrypts it and restores the request's `Cookie` header before `connect` runs. It drops
@@ -82,9 +87,12 @@ Your connection's existing `cookies` lookup then works over both transports.
 
 What to know:
 
-- **Only the listed cookies travel.** With none listed, no token renders and a WebTransport cable is
-  anonymous.
-- **The token expires after a day.** A reconnect after that waits for the next page load.
+- **Only those cookies travel**, and only the ones the page has. Set `cable_cookies = []` to send
+  none, for an app whose cable is anonymous.
+- **The token expires after a day.** A reconnect after that connects without cookies until the next
+  page load, and logs a warning saying so. If WebTransport cables are rejected while WebSocket ones
+  aren't, check the cookie your connection reads is among those that travel; QUICSILVER_DEBUG=1 logs
+  the ones each cable restored.
 - **It is a snapshot.** A cookie rotated after the page rendered arrives stale until the next load.
 - **Logout revokes the cable only as well as your lookup does.** A database-backed session stops
   working when its row is deleted. A cookie-store session keeps working until the token expires, as a

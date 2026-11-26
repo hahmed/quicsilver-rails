@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "stringio"
 
 class QuicsilverActionCableSocketTest < Minitest::Test
   class EventTarget
@@ -267,6 +268,24 @@ class QuicsilverActionCableSocketTest < Minitest::Test
     end
   end
 
+  # An expired or foreign token signs the user out of the cable; that must be visible.
+  def test_a_cookie_token_this_app_cannot_read_is_reported
+    with_cookie_bridge do
+      forged = Quicsilver::ActionCable::CookieBridge.new(secret: "o" * 32, names: %w[session_token])
+
+      log = with_transport_log { cookie_seen_at_open(handshake(cookies: forged.token_for("session_token" => "x"))) }
+
+      assert_match(/cookie token .* expired or was not issued by this app/, log)
+    end
+  end
+
+  # A signed-out page renders no token. Nothing surprising, so nothing to say.
+  def test_a_cable_without_a_cookie_token_logs_nothing
+    with_cookie_bridge do
+      assert_empty with_transport_log { cookie_seen_at_open(handshake) }
+    end
+  end
+
   def test_handshake_is_not_delivered_as_a_cable_message
     stream = Stream.new(handshake("signed-credential"), '{"command":"subscribe"}')
     session = Session.new(stream)
@@ -308,6 +327,16 @@ class QuicsilverActionCableSocketTest < Minitest::Test
 
   def handshake(credential = nil, cookies: nil)
     JSON.generate(quicsilver_handshake: { cookies: cookies, credential: credential })
+  end
+
+  def with_transport_log
+    previous = Quicsilver.logger
+    output = StringIO.new
+    Quicsilver.logger = Logger.new(output, level: Logger::INFO)
+    yield
+    output.string
+  ensure
+    Quicsilver.logger = previous
   end
 
   def with_cookie_bridge

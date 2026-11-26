@@ -107,19 +107,21 @@ import "quicsilver/cable_boot"
 import "@hotwired/turbo-rails"
 ```
 
-Render the tags in the layout, and name the cookies your connection authenticates with:
+Render the tags in the layout:
 
 ```erb
 <%# layout <head> %>
 <%= quicsilver_meta_tags %>
 ```
 
+Browsers send no cookies on a WebTransport CONNECT. The page carries them, encrypted, and the cable restores them before `connect` runs, so `ApplicationCable::Connection` needs no change: its usual `cookies` lookup works over both transports. By default that's the Rails session cookie and `session_id`, which is what Devise, `session[:user_id]` and Rails' authentication generator sign in with. If your connection reads another cookie, name it:
+
 ```ruby
 # config/application.rb
 config.quicsilver.cable_cookies = %i[session_token]
 ```
 
-Browsers send no cookies on a WebTransport CONNECT. The page carries those cookies, encrypted, and the cable restores them before `connect` runs, so `ApplicationCable::Connection` needs no change: its usual `cookies` lookup works over both transports. Only the listed cookies travel. Logging out revokes the cable if your sessions are database rows; a cookie-store session keeps working until the token expires (a day), as a copied cookie would. See [`docs/action-cable.md`](docs/action-cable.md#authentication).
+Only those cookies travel. Logging out revokes the cable if your sessions are database rows; a cookie-store session keeps working until the token expires (a day), as a copied cookie would. See [`docs/action-cable.md`](docs/action-cable.md#authentication).
 
 The importmap pins for `quicsilver/*` are added by the engine.
 

@@ -17,7 +17,8 @@ module Quicsilver
     # does over a WebSocket.
     #
     # Only the cookies named in config.quicsilver.cable_cookies travel, so unrelated cookies stay
-    # out of the page. The token is encrypted, expires, and is only read on a cable handshake.
+    # out of the page. Without it, the ones Rails apps sign in with by default (see .default_names).
+    # The token is encrypted, expires, and is only read on a cable handshake.
     #
     # It carries a snapshot: a cookie rotated after the page rendered arrives stale until the next
     # page load. Revoking access on logout depends on the app's lookup: a database-backed session
@@ -31,7 +32,14 @@ module Quicsilver
         app = ::Rails.application if defined?(::Rails)
         return unless app
 
-        new(secret: app.key_generator.generate_key(PURPOSE, 32), names: app.config.quicsilver.cable_cookies)
+        names = app.config.quicsilver.cable_cookies || default_names(app)
+        new(secret: app.key_generator.generate_key(PURPOSE, 32), names: names)
+      end
+
+      # The session cookie, which holds a Devise or session[:user_id] sign-in, and session_id, the
+      # cookie Rails' authentication generator signs users in with. Only those present travel.
+      def self.default_names(app)
+        [ app.config.session_options.to_h[:key], "session_id" ].compact
       end
 
       def initialize(secret:, names:)

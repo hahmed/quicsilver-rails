@@ -16,7 +16,7 @@ First release. Requires Ruby 3.4+, Rails 8.0+ and Quicsilver 0.6.
 - `request.http3?` tells a controller or view whether the request arrived over HTTP/3.
 - A local development certificate that browsers trust, shared by the HTTPS and HTTP/3 servers.
 - Action Cable and Turbo Streams over WebTransport, with no changes to your channels. Browsers that can't use WebTransport stay on WebSockets.
-- WebTransport cables sign in with the page's cookies, so `ApplicationCable::Connection` doesn't change.
+- WebTransport cables sign in with the page's cookies, so `ApplicationCable::Connection` doesn't change. Apps using the Rails session or Rails' authentication generator need no configuration.
 - `quicsilver_meta_tags`, one helper for everything a page's `<head>` needs.
 - WebTransport endpoints for realtime features beyond Action Cable: channels, request/response, server streaming, message streams and datagrams, mounted with a `webtransport` route.
 - Errors raised in WebTransport handlers go to `Rails.error`; the client gets a generic error.
