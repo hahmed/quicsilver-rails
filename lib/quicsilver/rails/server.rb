@@ -59,9 +59,14 @@ module Quicsilver
       # Without this the transport writes to its own $stdout logger: absent from log/<env>.log, in a
       # different format, and impossible to line up with the request it belongs to.
       # QUICSILVER_DEBUG=1 turns on the transport's detail.
+      #
+      # protocol-rack, which serves the Rack app, logs through the console gem to stderr instead, so
+      # that goes through the same logger. This process is the HTTP/3 server, so it owns the console
+      # gem's output, as `rails server` owns Rails'.
       def log_transport_to_rails
         level = ENV["QUICSILVER_DEBUG"].present? ? Logger::DEBUG : Logger::INFO
         Quicsilver.logger = TransportLogger.new(::Rails.logger, level: level)
+        ::Console.logger = ::Console::Logger.new(TransportLogger::ConsoleOutput.new(Quicsilver.logger), level: :debug)
       end
     end
   end

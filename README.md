@@ -55,7 +55,7 @@ require_relative "../config/environment"
 Quicsilver::Rails::Server.start
 ```
 
-`Server.start` loads the development certificate, tunes the transport for browsers, and writes the transport log through `Rails.logger` (tagged `[quicsilver]`, in `log/<env>.log`). In development it also logs to the terminal, because this process doesn't go through `rails server`. It takes `port:`, `address:`, `certificate:` and `shutdown_timeout:` keywords, which default to the environment variables below.
+`Server.start` loads the development certificate, tunes the transport for browsers, and writes the transport log through `Rails.logger` (tagged `[quicsilver]`, in `log/<env>.log`), including errors the Rack adapter logs, which would otherwise go to stderr. In development it also logs to the terminal, because this process doesn't go through `rails server`. It takes `port:`, `address:`, `certificate:` and `shutdown_timeout:` keywords, which default to the environment variables below.
 
 ### 3. Run both listeners
 
