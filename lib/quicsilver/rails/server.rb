@@ -32,7 +32,7 @@ module Quicsilver
           **transport_options
 
         server = Quicsilver::Server.new Integer(port), address: address, app: app, server_configuration: configuration
-        server.shutdown_timeout = shutdown_timeout if shutdown_timeout && server.respond_to?(:shutdown_timeout=)
+        server.shutdown_timeout = shutdown_timeout if shutdown_timeout
 
         Quicsilver.logger.info "listening on UDP #{address}:#{port}"
         server.start

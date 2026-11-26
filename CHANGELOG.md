@@ -15,7 +15,7 @@
 
 ### Changed
 
-- Depends on quicsilver `~> 0.5.0` from rubygems rather than a git ref.
+- Depends on quicsilver `~> 0.6.0` from rubygems rather than a git ref. 0.6.0 is the first release with `Server#shutdown_timeout=`, which `QUICSILVER_SHUTDOWN_TIMEOUT` sets.
 - `FramedStream` reads the core stream directly; callback-style (`on_data`) streams are no longer adapted.
 - A send on a cable socket that is not open reports through `onerror`; `onclose` reports what the transport did rather than what was requested; a second cable stream on a session is closed.
 
