@@ -219,7 +219,33 @@ Datagrams may be dropped by the network or by congestion control. Receivers must
 
 ## Authentication and authorization
 
-A WebTransport session starts as an HTTP/3 request, so cookies and request headers are available at connection time. Do not treat that as enough for the whole session.
+A WebTransport session starts as an HTTP/3 request, but **browsers send no cookies on it**: the W3C spec opens it with credentials omitted. Request headers such as `Origin` arrive; the session cookie doesn't. Action Cable cables get theirs back through the adapter (see [`action-cable.md`](action-cable.md#authentication)), but endpoints don't, so an endpoint has to identify the user another way.
+
+Render a short-lived, purpose-scoped token in the page, pass it in the session URL, and check it in `#connect`. Raising there rejects the session before it's accepted:
+
+```erb
+<%= tag.meta name: "cursor-token", content: Current.user.signed_id(purpose: :webtransport, expires_in: 5.minutes) %>
+```
+
+```js
+const token = document.querySelector('meta[name="cursor-token"]').content
+const transport = await connect(`https://quicsilver.test:3443/cursors?token=${encodeURIComponent(token)}`)
+```
+
+```ruby
+class CursorTransport < Quicsilver::WebTransport::DatagramEndpoint
+  def connect
+    @current_user = User.find_signed!(request.params[:token], purpose: :webtransport)
+  end
+
+  private
+    attr_reader :current_user
+end
+```
+
+Rails' default `filter_parameters` include `token`, so it stays out of the request log. Check `request.origin` too if the endpoint should only be reached from your own pages.
+
+That establishes who the session belongs to. Don't treat it as enough for the whole session.
 
 Recommended rules:
 
