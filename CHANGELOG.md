@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-27
+
 First release. Requires Ruby 3.4+, Rails 8.0+ and Quicsilver 0.6.
 
 ### Added
@@ -25,4 +27,5 @@ First release. Requires Ruby 3.4+, Rails 8.0+ and Quicsilver 0.6.
 - Quicsilver's logs, and the HTTP/3 server's errors, appear in the Rails log.
 - Settings through environment variables: `QUICSILVER_PORT`, `QUICSILVER_HOST`, `QUICSILVER_DEV_HOSTS`, `QUICSILVER_DEBUG` and `QUICSILVER_SHUTDOWN_TIMEOUT`.
 
-[Unreleased]: https://github.com/hahmed/quicsilver-rails/commits/main
+[Unreleased]: https://github.com/hahmed/quicsilver-rails/compare/v0.1.0...main
+[0.1.0]: https://github.com/hahmed/quicsilver-rails/releases/tag/v0.1.0
