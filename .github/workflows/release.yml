@@ -42,6 +42,10 @@ jobs:
         run: bundle exec rake
       - name: Get RubyGems credentials
         uses: rubygems/configure-rubygems-credentials@c6ca7f4bac0e29c9bde8eeae0a0a986b27efa05f # v2.2.0
+        with:
+          # The RubyGems.org account that owns the gem (hahmed). Required for the first release
+          # through a pending trusted publisher, which creates the gem; ignored once it exists.
+          owner: "172662"
       - name: Build the gem
         run: gem build quicsilver-rails.gemspec
       - name: Publish the gem
